@@ -34,8 +34,23 @@ function showOverlay(tabs, initialHighlightIndex) {
       padding: 12px;
       min-width: 450px;
       max-width: 700px;
+      max-height: 80vh;
+      overflow-y: auto;
       box-shadow: 0 15px 40px rgba(0,0,0,0.6);
       border: 1px solid #444;
+    }
+    .modal::-webkit-scrollbar {
+      width: 8px;
+    }
+    .modal::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .modal::-webkit-scrollbar-thumb {
+      background: #555;
+      border-radius: 4px;
+    }
+    .modal::-webkit-scrollbar-thumb:hover {
+      background: #666;
     }
     .tab-item {
       display: flex;
@@ -106,7 +121,11 @@ function updateHighlight(index) {
   const shadow = overlayRoot.shadowRoot;
   const items = shadow.querySelectorAll(".tab-item");
   items.forEach((item, i) => {
-    item.classList.toggle("active", i === index);
+    const isActive = i === index;
+    item.classList.toggle("active", isActive);
+    if (isActive) {
+      item.scrollIntoView({ block: "nearest" });
+    }
   });
   currentHighlightIndex = index;
 }

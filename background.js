@@ -88,7 +88,7 @@ async function startOverlay() {
 
   // Get metadata for the top tabs
   const tabsInfo = [];
-  for (const id of mruStack.slice(0, 10)) {
+  for (const id of mruStack) {
     try {
       const tab = await chrome.tabs.get(id);
       tabsInfo.push({ id: tab.id, title: tab.title, faviconUrl: tab.favIconUrl });
@@ -126,7 +126,7 @@ async function startOverlay() {
 }
 
 function cycleHighlight() {
-  const max = Math.min(mruStack.length, 10);
+  const max = mruStack.length;
   highlightIndex = (highlightIndex + 1) % max;
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs[0]) {
