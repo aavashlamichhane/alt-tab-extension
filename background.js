@@ -1,26 +1,27 @@
 let mruStack = [];
 let overlayActive = false;
 let highlightIndex = 1;
+let iconCache = {}; // tabId -> dataUrl (base64)
 
 // Load stack from storage on initialization
 async function init() {
   const result = await chrome.storage.local.get("mruStack");
   const savedStack = result.mruStack || [];
   
-  // Get all current tabs
   const allTabs = await chrome.tabs.query({});
   const activeIds = new Set(allTabs.map(t => t.id));
 
-  // Filter out closed tabs from saved stack
   let filteredStack = savedStack.filter(id => activeIds.has(id));
-
-  // Add any new tabs that weren't in the saved stack
   const inStack = new Set(filteredStack);
   const newTabs = allTabs.filter(t => !inStack.has(t.id)).map(t => t.id);
   
   mruStack = [...filteredStack, ...newTabs];
 
-  // Move current active tab to top
+  // Warm up the icon cache for all existing tabs
+  allTabs.forEach(tab => {
+    if (tab.favIconUrl) cacheIcon(tab.id, tab.favIconUrl);
+  });
+
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (activeTab) {
     updateStack(activeTab.id);
@@ -28,6 +29,35 @@ async function init() {
     saveStack();
   }
 }
+
+async function cacheIcon(tabId, url) {
+  if (!url) return;
+  // If it's already a secure data URL or standard HTTPS, we can just store it
+  if (url.startsWith('data:') || url.startsWith('https://')) {
+    iconCache[tabId] = url;
+    return;
+  }
+
+  // For localhost, http, or file:// URLs, we fetch and convert to base64 in the background
+  // This avoids Private Network Access security prompts on the content script side
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      iconCache[tabId] = reader.result;
+    };
+    reader.readAsDataURL(blob);
+  } catch (e) {
+    console.log("Failed to cache icon:", url);
+  }
+}
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.favIconUrl) {
+    cacheIcon(tabId, changeInfo.favIconUrl);
+  }
+});
 
 init();
 
@@ -41,13 +71,11 @@ function updateStack(tabId) {
   saveStack();
 }
 
-// Update MRU stack on activation
 chrome.tabs.onActivated.addListener((info) => {
   if (overlayActive) return; 
   updateStack(info.tabId);
 });
 
-// Add to stack on tab creation
 chrome.tabs.onCreated.addListener((tab) => {
   if (!mruStack.includes(tab.id)) {
     mruStack.push(tab.id);
@@ -55,13 +83,12 @@ chrome.tabs.onCreated.addListener((tab) => {
   }
 });
 
-// Remove from stack on tab close
 chrome.tabs.onRemoved.addListener((tabId) => {
   mruStack = mruStack.filter(id => id !== tabId);
+  delete iconCache[tabId];
   saveStack();
 });
 
-// Handle Alt+Q Command
 chrome.commands.onCommand.addListener(async (command) => {
   if (command === "toggle-tab") {
     if (!overlayActive) {
@@ -76,7 +103,6 @@ async function startOverlay() {
   const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!currentTab) return;
 
-  // Final check: filter out any dead tabs that might have sneaked in
   const allTabs = await chrome.tabs.query({});
   const activeIds = new Set(allTabs.map(t => t.id));
   mruStack = mruStack.filter(id => activeIds.has(id));
@@ -86,16 +112,25 @@ async function startOverlay() {
   overlayActive = true;
   highlightIndex = 1;
 
-  // Get metadata for the top tabs
   const tabsInfo = [];
   for (const id of mruStack) {
     try {
       const tab = await chrome.tabs.get(id);
-      tabsInfo.push({ id: tab.id, title: tab.title, faviconUrl: tab.favIconUrl });
+      tabsInfo.push({ 
+        id: tab.id, 
+        title: tab.title, 
+        url: tab.url, 
+        cachedIcon: iconCache[id] || null 
+      });
     } catch (e) {}
   }
 
-  // Attempt to inject content script if messaging fails
+  const settings = await chrome.storage.local.get({
+    theme: 'fluent',
+    accentMode: 'auto',
+    manualAccentColor: '#0078d4'
+  });
+
   try {
     await chrome.tabs.sendMessage(currentTab.id, { type: "PING" });
   } catch (e) {
@@ -105,21 +140,12 @@ async function startOverlay() {
         files: ['content.js']
       });
     } catch (err) {
-      console.error("Scripting failed, fallback to quick switch", err);
       quickSwitch();
       overlayActive = false;
       return;
     }
   }
 
-  // Load current settings
-  const settings = await chrome.storage.local.get({
-    theme: 'fluent',
-    accentMode: 'auto',
-    manualAccentColor: '#0078d4'
-  });
-
-  // Send SHOW_OVERLAY
   try {
     await chrome.tabs.sendMessage(currentTab.id, {
       type: "SHOW_OVERLAY",

@@ -11,6 +11,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+function getSecureFaviconUrl(tabUrl, cachedIcon) {
+  // If we have a cached base64 icon from the background, use it directly.
+  if (cachedIcon) return cachedIcon;
+  
+  // Fallback to Google proxy for public sites if cache is missing
+  try {
+    const url = new URL(tabUrl);
+    return `https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(url.origin)}`;
+  } catch (e) {
+    return "https://www.google.com/s2/favicons?sz=64&domain=microsoft.com";
+  }
+}
+
 function showOverlay(tabs, initialHighlightIndex, settings) {
   if (overlayRoot) removeOverlay();
 
@@ -125,9 +138,10 @@ function showOverlay(tabs, initialHighlightIndex, settings) {
     
     const icon = document.createElement("img");
     icon.className = "tab-icon";
-    // Fallback for favicons
-    icon.src = tab.faviconUrl || "https://www.google.com/s2/favicons?sz=64&domain=microsoft.com";
-    icon.onerror = () => icon.src = "https://www.google.com/s2/favicons?sz=64&domain=microsoft.com";
+    icon.src = getSecureFaviconUrl(tab.url, tab.cachedIcon);
+    icon.onerror = () => {
+      icon.src = "https://www.google.com/s2/favicons?sz=64&domain=microsoft.com";
+    };
 
     const title = document.createElement("span");
     title.className = "tab-title";
@@ -164,15 +178,20 @@ function updateHighlight(index) {
 }
 
 function handleKeyUp(e) {
-  // If user releases Alt, commit
   if (e.key === "Alt") {
+    e.preventDefault();
+    e.stopPropagation();
     commitSwitch();
   }
 }
 
 function handleKeyDown(e) {
   if (e.key === "Escape") {
+    e.preventDefault();
+    e.stopPropagation();
     cancelSwitch();
+  } else if (e.key === "q" || e.key === "Q") {
+    e.stopPropagation();
   }
 }
 
