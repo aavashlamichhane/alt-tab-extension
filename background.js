@@ -2,10 +2,44 @@ let mruStack = [];
 let overlayActive = false;
 let highlightIndex = 1;
 
-// Initialize stack with current tabs
-chrome.tabs.query({}, (tabs) => {
-  mruStack = tabs.map(t => t.id);
-});
+// Load stack from storage on initialization
+async function init() {
+  const result = await chrome.storage.local.get("mruStack");
+  const savedStack = result.mruStack || [];
+  
+  // Get all current tabs
+  const allTabs = await chrome.tabs.query({});
+  const activeIds = new Set(allTabs.map(t => t.id));
+
+  // Filter out closed tabs from saved stack
+  let filteredStack = savedStack.filter(id => activeIds.has(id));
+
+  // Add any new tabs that weren't in the saved stack
+  const inStack = new Set(filteredStack);
+  const newTabs = allTabs.filter(t => !inStack.has(t.id)).map(t => t.id);
+  
+  mruStack = [...filteredStack, ...newTabs];
+
+  // Move current active tab to top
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (activeTab) {
+    updateStack(activeTab.id);
+  } else {
+    saveStack();
+  }
+}
+
+init();
+
+function saveStack() {
+  chrome.storage.local.set({ mruStack });
+}
+
+function updateStack(tabId) {
+  mruStack = mruStack.filter(id => id !== tabId);
+  mruStack.unshift(tabId);
+  saveStack();
+}
 
 // Update MRU stack on activation
 chrome.tabs.onActivated.addListener((info) => {
@@ -17,18 +51,15 @@ chrome.tabs.onActivated.addListener((info) => {
 chrome.tabs.onCreated.addListener((tab) => {
   if (!mruStack.includes(tab.id)) {
     mruStack.push(tab.id);
+    saveStack();
   }
 });
 
 // Remove from stack on tab close
 chrome.tabs.onRemoved.addListener((tabId) => {
   mruStack = mruStack.filter(id => id !== tabId);
+  saveStack();
 });
-
-function updateStack(tabId) {
-  mruStack = mruStack.filter(id => id !== tabId);
-  mruStack.unshift(tabId);
-}
 
 // Handle Alt+Q Command
 chrome.commands.onCommand.addListener(async (command) => {
@@ -45,15 +76,15 @@ async function startOverlay() {
   const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!currentTab) return;
 
+  // Final check: filter out any dead tabs that might have sneaked in
+  const allTabs = await chrome.tabs.query({});
+  const activeIds = new Set(allTabs.map(t => t.id));
+  mruStack = mruStack.filter(id => activeIds.has(id));
+
   if (mruStack.length < 2) return;
 
   overlayActive = true;
   highlightIndex = 1;
-
-  // Clean the stack (remove dead tabs)
-  const tabs = await chrome.tabs.query({});
-  const activeIds = new Set(tabs.map(t => t.id));
-  mruStack = mruStack.filter(id => activeIds.has(id));
 
   // Get metadata for the top tabs
   const tabsInfo = [];
