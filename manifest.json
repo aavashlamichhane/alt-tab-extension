@@ -1,14 +1,22 @@
 {
   "manifest_version": 3,
   "name": "Edge Alt-Tab",
+  "short_name": "Alt-Tab",
   "version": "1.1",
-  "description": "MRU (Most Recently Used) tab switcher with Fluent and Simple themes.",
+  "author": "Aavash",
+  "description": "Switch tabs instantly in MRU (Most Recently Used) order with a beautiful Fluent-inspired overlay. Mimics the native Alt-Tab experience in your browser.",
   "permissions": [
     "tabs",
     "storage",
     "scripting"
   ],
   "options_page": "options.html",
+  "icons": {
+    "16": "icon16.png",
+    "32": "icon32.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
   "background": {
     "service_worker": "background.js"
   },
