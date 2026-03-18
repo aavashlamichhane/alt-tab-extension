@@ -60,6 +60,7 @@ function showOverlay(tabs, initialHighlightIndex) {
       color: #ccc;
       margin-bottom: 4px;
       transition: background 0.1s;
+      cursor: pointer;
     }
     .tab-item.active {
       background: #444;
@@ -83,12 +84,21 @@ function showOverlay(tabs, initialHighlightIndex) {
 
   const container = document.createElement("div");
   container.className = "overlay-container";
+  container.onclick = () => cancelSwitch();
+
   const modal = document.createElement("div");
   modal.className = "modal";
+  modal.onclick = (e) => e.stopPropagation();
 
   tabs.forEach((tab, index) => {
     const item = document.createElement("div");
     item.className = `tab-item ${index === initialHighlightIndex ? "active" : ""}`;
+    
+    item.onclick = (e) => {
+      e.stopPropagation();
+      currentHighlightIndex = index;
+      commitSwitch();
+    };
     
     const icon = document.createElement("img");
     icon.className = "tab-icon";
