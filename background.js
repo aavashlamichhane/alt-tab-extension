@@ -19,7 +19,7 @@ async function init() {
 
   // Warm up the icon cache for all existing tabs
   allTabs.forEach(tab => {
-    if (tab.favIconUrl) cacheIcon(tab.id, tab.favIconUrl);
+    cacheIcon(tab.id, tab.url);
   });
 
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -30,32 +30,31 @@ async function init() {
   }
 }
 
-async function cacheIcon(tabId, url) {
-  if (!url) return;
-  // If it's already a secure data URL or standard HTTPS, we can just store it
-  if (url.startsWith('data:') || url.startsWith('https://')) {
-    iconCache[tabId] = url;
-    return;
-  }
+async function cacheIcon(tabId, tabUrl) {
+  if (!tabUrl) return;
 
-  // For localhost, http, or file:// URLs, we fetch and convert to base64 in the background
-  // This avoids Private Network Access security prompts on the content script side
+  // We use the browser's official internal favicon proxy
+  // This is the most robust way to get icons (including localhost) 
+  // without triggering any security or network prompts.
+  const proxyUrl = `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(tabUrl)}&size=64`;
+
   try {
-    const response = await fetch(url);
+    const response = await fetch(proxyUrl);
     const blob = await response.blob();
     const reader = new FileReader();
     reader.onloadend = () => {
-      iconCache[tabId] = reader.result;
+      iconCache[tabId] = reader.result; // This is a data: URI (Base64)
     };
     reader.readAsDataURL(blob);
   } catch (e) {
-    console.log("Failed to cache icon:", url);
+    console.log("Failed to proxy icon for:", tabUrl);
   }
 }
 
+// Refresh cache when tab changes or loads
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.favIconUrl) {
-    cacheIcon(tabId, changeInfo.favIconUrl);
+  if (changeInfo.status === 'complete' || changeInfo.favIconUrl || changeInfo.url) {
+    cacheIcon(tabId, tab.url);
   }
 });
 
