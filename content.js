@@ -23,62 +23,80 @@ function showOverlay(tabs, initialHighlightIndex) {
     .overlay-container {
       position: fixed;
       top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(0,0,0,0.4);
+      background: rgba(0, 0, 0, 0.45);
       display: flex; justify-content: center; align-items: center;
       z-index: 2147483647;
-      font-family: 'Segoe UI', sans-serif;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      transition: opacity 0.15s ease-out;
+    }
+    .overlay-container.closing {
+      opacity: 0;
     }
     .modal {
-      background: #2b2b2b;
+      background: rgba(32, 33, 36, 0.75);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
       border-radius: 12px;
       padding: 12px;
-      min-width: 450px;
-      max-width: 700px;
+      min-width: 480px;
+      max-width: 720px;
       max-height: 80vh;
       overflow-y: auto;
-      box-shadow: 0 15px 40px rgba(0,0,0,0.6);
-      border: 1px solid #444;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      animation: fadeInScale 0.15s cubic-bezier(0.1, 0.9, 0.2, 1);
+    }
+    @keyframes fadeInScale {
+      0% { opacity: 0; transform: scale(0.96); }
+      100% { opacity: 1; transform: scale(1); }
     }
     .modal::-webkit-scrollbar {
-      width: 8px;
+      width: 6px;
     }
     .modal::-webkit-scrollbar-track {
       background: transparent;
     }
     .modal::-webkit-scrollbar-thumb {
-      background: #555;
-      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 10px;
     }
     .modal::-webkit-scrollbar-thumb:hover {
-      background: #666;
+      background: rgba(255, 255, 255, 0.3);
     }
     .tab-item {
       display: flex;
       align-items: center;
-      padding: 12px 16px;
-      border-radius: 6px;
-      color: #ccc;
-      margin-bottom: 4px;
-      transition: background 0.1s;
+      padding: 10px 14px;
+      border-radius: 8px;
+      color: rgba(255, 255, 255, 0.8);
+      margin-bottom: 2px;
+      transition: background 0.1s, transform 0.05s;
       cursor: pointer;
+      border-left: 3px solid transparent;
+    }
+    .tab-item:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
     }
     .tab-item.active {
-      background: #444;
+      background: rgba(255, 255, 255, 0.12);
       color: #fff;
-      outline: 2px solid #0078d4;
+      border-left-color: #0078d4;
     }
     .tab-icon {
-      width: 24px;
-      height: 24px;
-      margin-right: 16px;
+      width: 26px;
+      height: 26px;
+      margin-right: 14px;
       flex-shrink: 0;
       border-radius: 4px;
+      background: rgba(255, 255, 255, 0.05);
     }
     .tab-title {
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      font-size: 15px;
+      font-size: 14.5px;
+      font-weight: 400;
     }
   `;
 
@@ -165,8 +183,19 @@ function cancelSwitch() {
 
 function removeOverlay() {
   if (overlayRoot) {
-    overlayRoot.remove();
-    overlayRoot = null;
+    const container = overlayRoot.shadowRoot.querySelector(".overlay-container");
+    if (container) {
+      container.classList.add("closing");
+      setTimeout(() => {
+        if (overlayRoot) {
+          overlayRoot.remove();
+          overlayRoot = null;
+        }
+      }, 150);
+    } else {
+      overlayRoot.remove();
+      overlayRoot = null;
+    }
   }
   window.removeEventListener("keyup", handleKeyUp);
   window.removeEventListener("keydown", handleKeyDown);
