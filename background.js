@@ -112,12 +112,20 @@ async function startOverlay() {
     }
   }
 
+  // Load current settings
+  const settings = await chrome.storage.local.get({
+    theme: 'fluent',
+    accentMode: 'auto',
+    manualAccentColor: '#0078d4'
+  });
+
   // Send SHOW_OVERLAY
   try {
     await chrome.tabs.sendMessage(currentTab.id, {
       type: "SHOW_OVERLAY",
       tabs: tabsInfo,
-      highlightIndex
+      highlightIndex,
+      settings
     });
   } catch (e) {
     quickSwitch();

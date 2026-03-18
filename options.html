@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Edge Alt-Tab Settings</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background-color: #1a1a1a;
+      color: #e0e0e0;
+      padding: 30px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 24px; font-weight: 600; margin-bottom: 20px; color: #fff; }
+    .section {
+      background: #252525;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      border: 1px solid #333;
+    }
+    .section-title { font-size: 16px; font-weight: 600; margin-bottom: 15px; color: #fff; display: block; }
+    .setting-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; }
+    .setting-label { font-size: 14px; color: #ccc; }
+    .description { font-size: 12px; color: #888; margin-top: 5px; }
+    
+    select, input[type="color"] {
+      background: #333;
+      border: 1px solid #444;
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      outline: none;
+    }
+    input[type="color"] { padding: 2px; width: 50px; height: 34px; border: none; cursor: pointer; }
+
+    .shortcut-link {
+      color: #0078d4;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .shortcut-link:hover { text-decoration: underline; }
+
+    .save-status {
+      font-size: 14px;
+      color: #4caf50;
+      opacity: 0;
+      transition: opacity 0.3s;
+      margin-left: 10px;
+    }
+    .save-status.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <h1>Alt-Tab Settings</h1>
+
+  <div class="section">
+    <label class="section-title">Visual Theme</label>
+    <div class="setting-row">
+      <div>
+        <span class="setting-label">Overlay Theme</span>
+        <div class="description">Fluent includes acrylic blur and animations. Simple is faster.</div>
+      </div>
+      <select id="theme">
+        <option value="fluent">Fluent (Modern)</option>
+        <option value="simple">Simple (Classic)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="section">
+    <label class="section-title">Accent Color</label>
+    <div class="setting-row">
+      <span class="setting-label">Accent Color Mode</span>
+      <select id="accentMode">
+        <option value="manual">Manual</option>
+        <option value="auto">Automatic (Browser Theme)</option>
+      </select>
+    </div>
+    <div class="setting-row" id="manualColorRow">
+      <span class="setting-label">Choose Color</span>
+      <input type="color" id="manualAccentColor" value="#0078d4">
+    </div>
+    <div class="description">Automatic mode matches the accent color to your browser theme where possible.</div>
+  </div>
+
+  <div class="section">
+    <label class="section-title">Keyboard Shortcut</label>
+    <div class="setting-row">
+      <span class="setting-label">Current: Alt + Q</span>
+      <a href="#" id="openShortcuts" class="shortcut-link">Change Shortcut</a>
+    </div>
+    <div class="description">Standard browser shortcuts (like Ctrl+Tab) are reserved and cannot be used by extensions.</div>
+  </div>
+
+  <div style="display: flex; align-items: center; justify-content: flex-end;">
+    <span id="status" class="save-status">Settings saved!</span>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

@@ -5,14 +5,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "PING") {
     sendResponse({ ok: true });
   } else if (message.type === "SHOW_OVERLAY") {
-    showOverlay(message.tabs, message.highlightIndex);
+    showOverlay(message.tabs, message.highlightIndex, message.settings);
   } else if (message.type === "UPDATE_HIGHLIGHT") {
     updateHighlight(message.highlightIndex);
   }
 });
 
-function showOverlay(tabs, initialHighlightIndex) {
+function showOverlay(tabs, initialHighlightIndex, settings) {
   if (overlayRoot) removeOverlay();
+
+  const isFluent = settings.theme === 'fluent';
+  const accentColor = settings.accentMode === 'manual' ? settings.manualAccentColor : '#0078d4';
 
   overlayRoot = document.createElement("div");
   overlayRoot.id = "edge-alt-tab-overlay-container";
@@ -20,10 +23,13 @@ function showOverlay(tabs, initialHighlightIndex) {
 
   const style = document.createElement("style");
   style.textContent = `
+    :host {
+      --accent-color: ${accentColor};
+    }
     .overlay-container {
       position: fixed;
       top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(0, 0, 0, 0.45);
+      background: rgba(0, 0, 0, ${isFluent ? '0.45' : '0.6'});
       display: flex; justify-content: center; align-items: center;
       z-index: 2147483647;
       font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -33,9 +39,8 @@ function showOverlay(tabs, initialHighlightIndex) {
       opacity: 0;
     }
     .modal {
-      background: rgba(32, 33, 36, 0.75);
-      backdrop-filter: blur(20px) saturate(180%);
-      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      background: ${isFluent ? 'rgba(32, 33, 36, 0.75)' : '#252525'};
+      ${isFluent ? 'backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);' : ''}
       border-radius: 12px;
       padding: 12px;
       min-width: 480px;
@@ -43,8 +48,8 @@ function showOverlay(tabs, initialHighlightIndex) {
       max-height: 80vh;
       overflow-y: auto;
       box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      animation: fadeInScale 0.15s cubic-bezier(0.1, 0.9, 0.2, 1);
+      border: 1px solid ${isFluent ? 'rgba(255, 255, 255, 0.1)' : '#333'};
+      ${isFluent ? 'animation: fadeInScale 0.15s cubic-bezier(0.1, 0.9, 0.2, 1);' : ''}
     }
     @keyframes fadeInScale {
       0% { opacity: 0; transform: scale(0.96); }
@@ -81,7 +86,7 @@ function showOverlay(tabs, initialHighlightIndex) {
     .tab-item.active {
       background: rgba(255, 255, 255, 0.12);
       color: #fff;
-      border-left-color: #0078d4;
+      border-left-color: var(--accent-color);
     }
     .tab-icon {
       width: 26px;
