@@ -112,17 +112,28 @@ async function startOverlay() {
   highlightIndex = 1;
 
   const tabsInfo = [];
+  const validMruStack = [];
   for (const id of mruStack) {
-    try {
-      const tab = await chrome.tabs.get(id);
+    const tab = allTabs.find(t => t.id === id);
+
+    // Filter out internal/empty new tabs to prevent invisible "ghost" tabs
+    const isGhostTab = tab && (
+      !tab.url || tab.url === '' || 
+      tab.url.startsWith('edge://newtab') || 
+      tab.url.startsWith('chrome://newtab')
+    );
+
+    if (tab && !isGhostTab) {
+      validMruStack.push(id);
       tabsInfo.push({ 
         id: tab.id, 
         title: tab.title, 
         url: tab.url, 
         cachedIcon: iconCache[id] || null 
       });
-    } catch (e) {}
+    }
   }
+  mruStack = validMruStack;
 
   const settings = await chrome.storage.local.get({
     theme: 'fluent',
