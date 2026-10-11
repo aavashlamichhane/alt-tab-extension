@@ -1,10 +1,12 @@
-# Edge Alt-Tab
+# Alt-Tab
 
-A lightweight most-recently-used tab switcher for Microsoft Edge and Chrome on Chromium 121 or newer.
+A lightweight most-recently-used tab switcher designed for **Microsoft Edge and Google Chrome**, using Chromium 121 or newer.
+
+Published in the Microsoft Edge Add-ons store as **Edge Alt-Tab**. Chrome users can load the same source folder in Developer mode; the Edge store link below is for installation in Edge.
 
 [Install Edge Alt-Tab from Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/dfkilmdlljlgppagklljonbngphbhkho)
 
-Hold **Alt**, press **Q** to select your previous tab, press Q again to cycle, then release Alt to switch. **Alt+Shift+Q** cycles backwards. On internal Edge pages, Alt+Q switches directly to the previous tab. Click the toolbar icon to search tabs wherever Edge permits opening the popup.
+Hold **Alt**, press **Q** to select your previous tab, press Q again to cycle, then release Alt to switch. **Alt+Shift+Q** cycles backwards. On restricted browser pages, the shortcut switches directly to the previous tab. Click the toolbar icon to search tabs wherever the browser permits opening the popup.
 
 ## Features
 
@@ -36,7 +38,7 @@ Search always uses Enter/click confirmation. Escape clears a nonempty search fir
 
 For everyday use in Edge, open the [Microsoft Edge Add-ons listing](https://microsoftedge.microsoft.com/addons/detail/dfkilmdlljlgppagklljonbngphbhkho), click **Get**, and confirm installation. Store releases become available after Microsoft's review; the repository may contain a newer version while an update is being reviewed.
 
-To try the source version locally, download and extract this repository or clone it:
+For Chrome, or to test the source version in Edge, download and extract this repository or clone it:
 
 ```sh
 git clone https://github.com/aavashlamichhane/alt-tab-extension.git
@@ -44,14 +46,19 @@ git clone https://github.com/aavashlamichhane/alt-tab-extension.git
 
 Changes to a local copy do not update an installed store copy. To load version 1.4.2 locally:
 
-1. Open `edge://extensions` and temporarily disable any older Edge Alt-Tab copy, so it does not claim the same shortcuts.
+| Browser | Extensions page | Keyboard shortcut assignments |
+| --- | --- | --- |
+| Microsoft Edge | `edge://extensions` | `edge://extensions/shortcuts` |
+| Google Chrome | `chrome://extensions` | `chrome://extensions/shortcuts` |
+
+1. Open your browser's Extensions page from the table above and temporarily disable any older Edge Alt-Tab copy, so it does not claim the same shortcuts.
 2. Enable **Developer mode**, choose **Load unpacked**, and select the downloaded or cloned `alt-tab-extension` folder containing `manifest.json`. No build or npm installation is needed to load the project.
 3. Check that the new extension card shows **1.4.2**, its enable toggle is on, and it has no loading errors. If this exact folder is already loaded, click **Reload** on its card instead.
-4. Open `edge://extensions/shortcuts`. Assign **Alt+Q** to **Cycle through recently used tabs** and **Alt+Shift+Q** to **Cycle backwards through recently used tabs**. Check assignments even when the manifest supplies defaults: another installed copy can prevent registration.
+4. Open your browser's shortcut assignments page from the table above. Assign **Alt+Q** to **Cycle through recently used tabs** and **Alt+Shift+Q** to **Cycle backwards through recently used tabs**. Check assignments even when the manifest supplies defaults: another installed copy can prevent registration.
 5. Reload the webpages you will test, especially Google Docs/Sheets, to install the updated frame bridge.
-6. Open at least two ordinary webpages in the same Edge window, visit both, then hold Alt, press and release Q, and release Alt. The highlighted previous tab should activate. The toolbar icon opens a searchable popup with click/Enter confirmation.
+6. Open at least two ordinary webpages in the same browser window, visit both, then hold Alt, press and release Q, and release Alt. The highlighted previous tab should activate. The toolbar icon opens a searchable popup with click/Enter confirmation.
 
-Chrome uses `chrome://extensions` and `chrome://extensions/shortcuts` with the same folder. After subsequent edits, click the extension card's **Reload**, then reload your test webpages.
+After subsequent edits, click the extension card's **Reload**, then reload your test webpages. Chrome uses the same `manifest.json` and runtime assets as Edge; no separate Chrome build is needed. See Google's [unpacked installation guide](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked).
 
 See [BROWSER_TESTING.md](BROWSER_TESTING.md) for a full manual test sequence, expected results, and troubleshooting a greyed-out entry or inactive shortcut. Microsoft's [sideloading guide](https://learn.microsoft.com/en-us/microsoft-edge/extensions-chromium/getting-started/extension-sideloading) describes loading and reloading unpacked extensions.
 
@@ -59,11 +66,11 @@ The manifest version is 1.4.2. Existing Fluent/Simple and custom-accent preferen
 
 ## Compatibility and privacy
 
-Restricted pages such as browser settings and some store/PDF pages cannot host the overlay. There Alt+Q switches immediately to the previous eligible tab, as in the original flow. Browser pages remain selectable from the overlay on ordinary webpages. The toolbar popup is a separate search entry point where Edge permits opening it. Local files require the browser's **Allow access to file URLs** setting. Some sandboxed/nonmatching frames cannot receive a bridge. A browser without a cached icon displays a generic icon.
+Restricted pages such as browser settings and some store/PDF pages cannot host the overlay. There Alt+Q switches immediately to the previous eligible tab, as in the original flow. Browser pages remain selectable from the overlay on ordinary webpages. The toolbar popup is a separate search entry point where the browser permits opening it. Local files require the browser's **Allow access to file URLs** setting. Some sandboxed/nonmatching frames cannot receive a bridge. A browser without a cached icon displays a generic icon.
 
 Normal and private tabs are kept separate when private access is enabled by the user. Website access is needed to detect modifier release in page frames; tab metadata is displayed only in an extension-origin document. The extension does not use external favicon services, analytics, or remote code. See [PRIVACY.md](PRIVACY.md) for data and permission details.
 
-Browser-accelerator dispatch, authenticated Docs/Sheets behavior, alternate keyboard layouts, and browser-managed pages still need a manual Edge release pass. See [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
+Automated browser checks run in Chromium, and the current version has also passed isolated Edge browser checks. Google Chrome's native shortcut dispatch has not yet been verified manually. Browser-accelerator dispatch, authenticated Docs/Sheets behavior, alternate keyboard layouts, and browser-managed pages still need a manual release pass in each target browser. See [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
 
 ## Development
 
