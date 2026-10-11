@@ -60,7 +60,7 @@ Changes to a local copy do not update an installed store copy. To load version 1
 
 After subsequent edits, click the extension card's **Reload**, then reload your test webpages. Chrome uses the same `manifest.json` and runtime assets as Edge; no separate Chrome build is needed. See Google's [unpacked installation guide](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked).
 
-See [BROWSER_TESTING.md](BROWSER_TESTING.md) for a full manual test sequence, expected results, and troubleshooting a greyed-out entry or inactive shortcut. Microsoft's [sideloading guide](https://learn.microsoft.com/en-us/microsoft-edge/extensions-chromium/getting-started/extension-sideloading) describes loading and reloading unpacked extensions.
+Microsoft's [sideloading guide](https://learn.microsoft.com/en-us/microsoft-edge/extensions-chromium/getting-started/extension-sideloading) describes loading and reloading unpacked extensions in Edge.
 
 The manifest version is 1.4.2. Existing Fluent/Simple and custom-accent preferences are retained. “Automatic” accent from older versions becomes accurately labelled default blue. The old durable tab-ID history is retired because IDs are specific to a browser session.
 
@@ -70,7 +70,20 @@ Restricted pages such as browser settings and some store/PDF pages cannot host t
 
 Normal and private tabs are kept separate when private access is enabled by the user. Website access is needed to detect modifier release in page frames; tab metadata is displayed only in an extension-origin document. The extension does not use external favicon services, analytics, or remote code. See [PRIVACY.md](PRIVACY.md) for data and permission details.
 
-Automated browser checks run in Chromium, and the current version has also passed isolated Edge browser checks. Google Chrome's native shortcut dispatch has not yet been verified manually. Browser-accelerator dispatch, authenticated Docs/Sheets behavior, alternate keyboard layouts, and browser-managed pages still need a manual release pass in each target browser. See [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
+Automated browser checks run in Chromium, and the current version has also passed isolated Edge browser checks. Google Chrome's native shortcut dispatch has not yet been verified manually. Browser-accelerator dispatch, authenticated Docs/Sheets behavior, alternate keyboard layouts, and browser-managed pages still need a manual release pass in each target browser.
+
+## Troubleshooting
+
+| Problem | What to check |
+| --- | --- |
+| Extension looks greyed out or does nothing | Check the extension card's enable toggle, version, and loading errors. A greyed-out toolbar entry alone does not identify the cause. |
+| Toolbar popup works but Alt+Q does nothing | Check shortcut assignments, duplicate installations, and browser/OS conflicts. Open at least two tabs in the selected window scope. |
+| Overlay opens but releasing Alt does not switch | Select **Release modifier to switch** in settings. Search and Enter-confirm mode require Enter or a click. |
+| Ordinary webpages work but Docs/Sheets do not | Reload the editor after updating, check extension site access, and test with keyboard focus inside the document or spreadsheet cell. |
+| Overlay is absent on an internal browser page | These pages use immediate previous-tab switching. Test the overlay on an ordinary webpage. |
+| Both the popup and shortcut fail | In settings, use **Troubleshooting → Check extension status** after trying the shortcut. An unchanged command timestamp suggests an assignment conflict; a failed operation calls for checking the extension's Errors or service-worker console. |
+
+Before a release, manually test modifier release in Docs/Sheets, rapid cycling, reverse cycling, search, cancellation, internal pages, and window switching in each target browser. Also load the extracted store ZIP to verify the actual package. A sleeping service worker is normal by itself.
 
 ## Development
 
@@ -94,7 +107,7 @@ npm run test:browser
 
 The browser script uses a temporary profile, creates test editor frames, and writes screenshots to ignored `test-results/`. Existing Playwright installations can be used through `PLAYWRIGHT_MODULE` and `PLAYWRIGHT_EXECUTABLE_PATH`; `EXTENSION_PATH` selects an extracted package for the same checks. Headless automation may need to invoke the command handler directly because it does not always dispatch native extension shortcuts.
 
-`generate_icons.html` is a developer-only icon generator and is excluded from store packages. The original review is in [IMPROVEMENT_REVIEW.md](IMPROVEMENT_REVIEW.md), and changes are in [CHANGELOG.md](CHANGELOG.md).
+`generate_icons.html` is a developer-only icon generator and is excluded from store packages. Version history is in [CHANGELOG.md](CHANGELOG.md). The store ZIP contains only runtime assets and the license; repository documentation, tests, and development tools are excluded.
 
 ## Support and license
 
