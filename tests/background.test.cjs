@@ -182,7 +182,89 @@ test('a blocked iframe times out to immediate switching but a ready UI does not'
 test('only a toolbar popup can initialize a standalone session', async () => {
   const f = fixture(); await f.flush();
   assert.equal((await f.message({ type: 'OPEN_POPUP' })).ok, false);
-  const sender = { ...f.ui(), tab: undefined, frameId: undefined };
+  const sender = f.popup();
   const result = await f.message({ type: 'OPEN_POPUP' }, sender);
   assert.equal(result.ok, true); assert.equal(result.state.modifier, null); assert.equal(result.state.embedded, false);
+});
+
+test('toolbar popup survives transient menu focus loss and still selects a tab', async () => {
+  const f = fixture(); const sender = { ...f.popup(), tab: { id: -1 } };
+  const result = await f.message({ type: 'OPEN_POPUP' }, sender);
+  assert.equal(result.ok, true);
+  f.chrome.windows.onFocusChanged.emit(-1); await f.flush();
+  assert.equal(f.state().id, result.state.sessionId);
+  assert.equal((await f.message({ type: 'UI_COMMIT', sessionId: result.state.sessionId, tabId: 2 }, sender)).ok, true);
+  assert.equal(f.calls.updates[0].id, 2);
+});
+
+test('closing a popup cancels after its browser context disappears and shortcuts reopen the overlay', async () => {
+  const f = fixture(); const sender = { ...f.popup(), documentId: undefined, tab: { id: -1 } };
+  const result = await f.message({ type: 'OPEN_POPUP' }, sender);
+  f.extensionContexts.length = 0;
+  assert.equal((await f.message({ type: 'GET_SESSION', sessionId: result.state.sessionId }, sender)).ok, false);
+  assert.equal((await f.message({ type: 'UI_CANCEL', sessionId: result.state.sessionId }, sender)).ok, true);
+  assert.equal(f.state(), null);
+  await f.command('toggle-tab');
+  assert.equal(f.state().embedded, true);
+  assert.equal((await f.message({ type: 'UI_CANCEL', sessionId: result.state.sessionId }, sender)).ok, false);
+  // Recover even if a browser does not deliver pagehide when dismissing a popup.
+  await f.message({ type: 'OPEN_POPUP' }, f.popup());
+  await f.command('toggle-tab'); assert.equal(f.state().embedded, true);
+});
+
+test('popup connection disconnect clears only its bound session even without pagehide', async () => {
+  const f = fixture(); const sender = f.popup();
+  await f.message({ type: 'OPEN_POPUP' }, sender);
+  const port = f.popupPort(sender); port.onMessage.emit({ sessionId: f.state().id });
+  f.extensionContexts.length = 0; port.onDisconnect.emit(); await f.flush();
+  assert.equal(f.state(), null);
+  await f.command('toggle-tab');
+  port.onDisconnect.emit(); await f.flush(); assert.equal(f.state().embedded, true);
+  const impostor = f.popupPort(f.bridge());
+  impostor.onMessage.emit({ sessionId: f.state().id }); impostor.onDisconnect.emit(); await f.flush();
+  assert.equal(f.state().embedded, true);
+});
+
+test('standalone switcher tabs and stale popup documents cannot access the live popup', async () => {
+  const f = fixture(); const sender = f.popup();
+  const result = await f.message({ type: 'OPEN_POPUP' }, sender);
+  const impostors = [f.ui('separate-tab'), { ...sender, documentId: 'stale-popup' }, f.bridge()];
+  for (const impostor of impostors) {
+    assert.equal((await f.message({ type: 'OPEN_POPUP' }, impostor)).ok, false);
+    assert.equal((await f.message({ type: 'UI_COMMIT', sessionId: result.state.sessionId, tabId: 2 }, impostor)).ok, false);
+    assert.equal((await f.message({ type: 'OPEN_OPTIONS', sessionId: result.state.sessionId }, impostor)).ok, false);
+  }
+  assert.equal(f.state().id, result.state.sessionId);
+  assert.deepEqual(f.calls.updates, []); assert.deepEqual(f.calls.options, []);
+});
+
+test('settings open before closing the embedded switcher or toolbar popup', async () => {
+  for (const embedded of [true, false]) {
+    const f = fixture(); let sender;
+    if (embedded) { await f.command('toggle-tab'); sender = f.ui(); }
+    else { sender = f.popup(); await f.message({ type: 'OPEN_POPUP' }, sender); }
+    const sessionId = f.state().id;
+    const result = await f.message({ type: 'OPEN_OPTIONS', sessionId }, sender);
+    assert.equal(result.ok, true); assert.equal(f.calls.options.length, 1);
+    assert.equal(f.calls.options[0].session.id, sessionId);
+    assert.equal(f.state(), null); assert.deepEqual(f.calls.updates, []);
+  }
+});
+
+test('failed settings navigation keeps the switcher usable for retry', async () => {
+  const f = fixture(); await f.command('toggle-tab'); const sessionId = f.state().id;
+  f.chrome.runtime.openOptionsPage = async () => { throw Error('navigation failed'); };
+  const result = await f.message({ type: 'OPEN_OPTIONS', sessionId });
+  assert.equal(result.ok, false); assert.equal(f.state().id, sessionId);
+  assert.equal((await f.message({ type: 'UI_COMMIT', sessionId, tabId: 2 })).ok, true);
+});
+
+test('toolbar settings remain accessible before tab initialization and after startup failure', async () => {
+  let release;
+  const cold = fixture({ startupGate: new Promise(resolve => { release = resolve; }) });
+  assert.equal((await cold.message({ type: 'OPEN_OPTIONS' }, cold.popup())).ok, true);
+  release(); await cold.flush();
+  const failed = fixture({ startupGate: Promise.reject(Error('storage unavailable')) });
+  assert.equal((await failed.message({ type: 'OPEN_OPTIONS' }, failed.popup())).ok, true);
+  assert.equal(failed.calls.options.length, 1);
 });

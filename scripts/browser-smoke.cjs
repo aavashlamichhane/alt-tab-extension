@@ -81,6 +81,27 @@ let profile;
   assert.equal(await frame.evaluate(() => document.activeElement.id), 'list');
   console.log('PASS: Tab navigation stays within the modal');
 
+  const optionsURL = `chrome-extension://${extensionId}/options.html`;
+  async function waitForSettings() {
+    const page = await until(() => Promise.resolve(context.pages().find(candidate => candidate.url() === optionsURL)));
+    await page.waitForSelector('#switchMode');
+    await until(() => worker.evaluate(async () => { await queue; return session; }), value => value === null);
+    await until(() => editor.locator('#edge-alt-tab-overlay-container').count(), count => count === 0);
+    assert.equal(await worker.evaluate(async url => (await chrome.tabs.query({ url })).length, optionsURL), 1);
+    return page;
+  }
+  await frame.locator('#settingsButton').click();
+  let openedSettings = await waitForSettings();
+  assert.equal(await worker.evaluate(async id => (await chrome.tabs.get(id)).active, ids['/reference']), false);
+  await openedSettings.close();
+  frame = await open();
+  await frame.locator('#settingsButton').focus(); await editor.keyboard.press('Enter');
+  openedSettings = await waitForSettings();
+  assert.equal(await worker.evaluate(async id => (await chrome.tabs.get(id)).active, ids['/reference']), false);
+  await openedSettings.close();
+  frame = await open();
+  console.log('PASS: overlay Settings opens options by mouse and Enter without switching tabs');
+
   // Force focus into the original editor frame while the overlay is open to
   // exercise the frame bridge, rather than only the extension UI listener.
   await editor.frameLocator('#editorFrame').locator('#input').focus();
@@ -199,8 +220,63 @@ let profile;
   await until(() => worker.evaluate(async () => { await queue; return session; }), value => value && !value.embedded && value.uiReady);
   const popupContexts = await worker.evaluate(() => chrome.runtime.getContexts({ contextTypes: ['POPUP'] }));
   assert.equal(popupContexts.length, 1);
-  await worker.evaluate(() => run(() => closeSession()));
-  console.log('PASS: real toolbar popup initializes its extension-owned tab list');
+  // Toolbar popups are native browser targets outside Playwright's page list.
+  // Attach directly to click the real popup rather than simulate a UI message.
+  const popupCDP = await context.newCDPSession(editor);
+  const popupTarget = (await popupCDP.send('Target.getTargets')).targetInfos.find(target => target.url === popupContexts[0].documentUrl);
+  assert.ok(popupTarget);
+  let attached = await popupCDP.send('Target.attachToTarget', { targetId: popupTarget.targetId, flatten: false });
+  let popupMessageId = 0;
+  const popupPending = new Map();
+  popupCDP.on('Target.receivedMessageFromTarget', event => {
+    if (event.sessionId !== attached.sessionId) return;
+    const message = JSON.parse(event.message);
+    const request = popupPending.get(message.id);
+    if (!request) return;
+    clearTimeout(request.timer); popupPending.delete(message.id);
+    if (message.error) request.reject(new Error(message.error.message)); else request.resolve(message.result);
+  });
+  async function popupCommand(method, params = {}) {
+    const id = ++popupMessageId;
+    const response = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { popupPending.delete(id); reject(new Error(`Popup command timed out: ${method}`)); }, 7000);
+      popupPending.set(id, { resolve, reject, timer });
+    });
+    await popupCDP.send('Target.sendMessageToTarget', { sessionId: attached.sessionId, message: JSON.stringify({ id, method, params }) });
+    return response;
+  }
+  async function popupEvaluate(expression) {
+    const result = await popupCommand('Runtime.evaluate', { expression, returnByValue: true });
+    assert.equal(result.exceptionDetails, undefined);
+    return result.result.value;
+  }
+  const popupLayout = await until(() => popupEvaluate(`(() => {
+    const rect = document.getElementById('switcher').getBoundingClientRect();
+    return { count: document.querySelectorAll('[role="option"]').length, width: rect.width,
+      height: rect.height, search: !document.getElementById('searchRow').hidden };
+  })()`), value => value.count > 0);
+  assert.equal(popupLayout.width, 400); assert.ok(popupLayout.height > 100); assert.equal(popupLayout.search, true);
+  const point = await popupEvaluate(`(() => { const rect = document.getElementById('settingsButton').getBoundingClientRect();
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }; })()`);
+  await popupCommand('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...point });
+  await popupCommand('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...point });
+  openedSettings = await waitForSettings();
+  assert.equal(openedSettings, options);
+  await until(() => worker.evaluate(async () => (await chrome.runtime.getContexts({ contextTypes: ['POPUP'] })).length), value => value === 0);
+  console.log('PASS: real toolbar popup renders its search/tab list and Settings reuses the options tab');
+
+  const popupSource = await context.newPage(); await popupSource.goto(`${internalPrefix}://settings/`);
+  await popupSource.bringToFront(); await worker.evaluate(() => chrome.action.openPopup());
+  await until(() => worker.evaluate(async () => { await queue; return session; }), value => value && !value.embedded && value.uiReady);
+  const internalPopupTarget = (await popupCDP.send('Target.getTargets')).targetInfos.find(target => target.url === `chrome-extension://${extensionId}/switcher.html`);
+  assert.ok(internalPopupTarget);
+  attached = await popupCDP.send('Target.attachToTarget', { targetId: internalPopupTarget.targetId, flatten: false });
+  await until(() => popupEvaluate('document.querySelectorAll("[role=option]").length'), value => value > 0);
+  await popupEvaluate('window.close(); true');
+  await until(() => worker.evaluate(async () => (await chrome.runtime.getContexts({ contextTypes: ['POPUP'] })).length), value => value === 0);
+  await until(() => worker.evaluate(async () => { await queue; return session; }), value => value === null);
+  await popupSource.close(); await popupCDP.detach();
+  console.log('PASS: toolbar popup works on an internal settings page and dismissal clears its session');
 
   await editor.bringToFront();
   await worker.evaluate(async () => {

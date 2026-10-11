@@ -14,7 +14,8 @@ function fixture({ saved = {}, preferences = {}, startupGate = Promise.resolve()
     { id: 4, windowId: 20, active: true, incognito: false, title: 'Other window', url: 'https://four.test/', lastAccessed: 250 },
     { id: 5, windowId: 30, active: true, incognito: true, title: 'Private', url: 'https://private.test/', lastAccessed: 400 }
   ]);
-  const calls = { pageMessages: [], broadcasts: [], updates: [], windows: [], scripts: [], warnings: [], popups: [] };
+  const calls = { pageMessages: [], broadcasts: [], updates: [], windows: [], scripts: [], warnings: [], popups: [], options: [] };
+  const extensionContexts = [];
   const sessionData = clone(saved);
   const localData = clone(preferences);
   let focusedWindow = 10;
@@ -27,7 +28,11 @@ function fixture({ saved = {}, preferences = {}, startupGate = Promise.resolve()
   });
   const chrome = {
     action: { async openPopup(options) { calls.popups.push(clone(options)); } },
-    runtime: { id: 'audit', getURL: name => `chrome-extension://audit/${name.replace(/^\//, '')}`, getManifest: () => ({ version: '1.4.2' }), onMessage: event(),
+    runtime: { id: 'audit', getURL: name => `chrome-extension://audit/${name.replace(/^\//, '')}`, getManifest: () => JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'))), onMessage: event(), onConnect: event(),
+      async getContexts(filter) { return clone(extensionContexts.filter(context =>
+        (!filter.contextTypes || filter.contextTypes.includes(context.contextType)) &&
+        (!filter.documentUrls || filter.documentUrls.includes(context.documentUrl)))); },
+      async openOptionsPage() { calls.options.push({ session: clone(evaluate('session')) }); },
       async sendMessage(message) { calls.broadcasts.push(clone(message)); } },
     storage: { local: storageArea(localData), session: storageArea(sessionData), onChanged: event() },
     commands: { onCommand: event(), async getAll() { return clone(chrome.commands.bindings); }, bindings: [
@@ -59,8 +64,17 @@ function fixture({ saved = {}, preferences = {}, startupGate = Promise.resolve()
   const state = () => clone(evaluate('session'));
   const bridge = (frameId = 0) => ({ id: 'audit', tab: { id: 1 }, frameId, documentId: `document-${frameId}`, url: 'https://one.test/' });
   const ui = (documentId = 'ui-document') => ({ id: 'audit', tab: { id: 1 }, frameId: 6, documentId, url: 'chrome-extension://audit/switcher.html' });
+  const popup = (documentId = 'popup-document') => {
+    const url = 'chrome-extension://audit/switcher.html';
+    extensionContexts.push({ contextType: 'POPUP', documentId, documentUrl: url });
+    return { id: 'audit', documentId, url };
+  };
+  const popupPort = sender => {
+    const port = { name: 'toolbar-switcher', sender, onMessage: event(), onDisconnect: event() };
+    chrome.runtime.onConnect.emit(port); return port;
+  };
   const message = (payload, sender = ui()) => new Promise(resolve => chrome.runtime.onMessage.emit(payload, sender, response => resolve(clone(response))));
-  return { chrome, tabs, calls, context, evaluate, command, state, bridge, ui, message, flush, sessionData, localData,
+  return { chrome, tabs, calls, context, evaluate, command, state, bridge, ui, popup, popupPort, extensionContexts, message, flush, sessionData, localData,
     restrict() { injectionFails = true; messagingFails = true; } };
 }
 module.exports = { fixture, root };

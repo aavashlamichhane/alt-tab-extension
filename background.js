@@ -173,7 +173,7 @@ async function handleCommand(command, invokedTab) {
   const direction = command === 'cycle-backward' ? -1 : 1;
   if (command === 'quick-switch' || settings.switchMode === 'instant') {
     await startSession(tab, { instant: true });
-  } else if (session && session.ownerTabId === tab.id) {
+  } else if (session?.embedded && session.ownerTabId === tab.id) {
     const index = session.candidateIds.indexOf(session.selectedTabId);
     session.selectedTabId = session.candidateIds[(index + direction + session.candidateIds.length) % session.candidateIds.length];
     await persist(); await broadcastState();
@@ -187,11 +187,43 @@ function isUI(sender) {
       source.protocol === extension.protocol && source.host === extension.host;
   } catch { return false; }
 }
-function ownsUI(message, sender) {
-  return isUI(sender) && session && message.sessionId === session.id &&
-    (session.embedded ? sender.tab?.id === session.ownerTabId : !sender.tab) &&
-    (!session.uiDocumentId || session.uiDocumentId === sender.documentId);
+async function isToolbarPopup(sender) {
+  if (!isUI(sender)) return false;
+  const contexts = await chrome.runtime.getContexts({
+    contextTypes: ['POPUP'], documentUrls: [chrome.runtime.getURL('switcher.html')]
+  });
+  return contexts.some(context => sender.documentId
+    ? context.documentId === sender.documentId
+    : !sender.tab || sender.tab.id === -1);
 }
+async function ownsUI(message, sender) {
+  const active = session;
+  return isUI(sender) && active && message.sessionId === active.id &&
+    (active.embedded ? sender.tab?.id === active.ownerTabId : await isToolbarPopup(sender)) &&
+    session === active && (!active.uiDocumentId || active.uiDocumentId === sender.documentId);
+}
+function ownsPopupCancellation(message, sender) {
+  // pagehide may reach the worker after the browser has removed the POPUP
+  // context. Allow this bound document to cancel, but never read/activate tabs.
+  return isUI(sender) && session && !session.embedded && message.sessionId === session.id &&
+    (session.uiDocumentId ? session.uiDocumentId === sender.documentId : !sender.tab || sender.tab.id === -1);
+}
+chrome.runtime.onConnect.addListener(port => {
+  if (port.name !== 'toolbar-switcher' || !isUI(port.sender)) return;
+  let popupSessionId;
+  let disconnected = false;
+  async function clearPopup() {
+    if (disconnected && popupSessionId && session?.id === popupSessionId && !session.embedded) await closeSession();
+  }
+  port.onMessage.addListener(message => { enqueue(async () => {
+    if (ownsPopupCancellation(message, port.sender)) popupSessionId = message.sessionId;
+    await clearPopup();
+  }); });
+  port.onDisconnect.addListener(() => {
+    disconnected = true;
+    enqueue(clearPopup);
+  });
+});
 function ownsBridge(message, sender) {
   return sender.id === chrome.runtime.id && sender.tab?.id === session?.ownerTabId && message.sessionId === session?.id;
 }
@@ -215,7 +247,7 @@ async function snapshot() {
 }
 async function onMessage(message, sender) {
   if (!message || sender.id !== chrome.runtime.id) return { ok: false };
-  if (message.type === 'OPEN_POPUP' && isUI(sender) && !sender.tab) {
+  if (message.type === 'OPEN_POPUP' && await isToolbarPopup(sender)) {
     const tab = await currentTab();
     await startSession(tab, { embedded: false });
     if (!session) return { ok: false };
@@ -223,13 +255,16 @@ async function onMessage(message, sender) {
     await persist();
     return { ok: true, state: await snapshot() };
   }
-  if (message.type === 'UI_READY' && ownsUI(message, sender)) {
+  if (message.type === 'UI_READY' && await ownsUI(message, sender)) {
     session.uiDocumentId = sender.documentId; session.uiReady = true;
     await persist();
     return { ok: true, state: await snapshot() };
   }
-  if (message.type === 'GET_SESSION' && ownsUI(message, sender)) return { ok: true, state: await snapshot() };
-  if (ownsUI(message, sender)) {
+  if (message.type === 'UI_CANCEL' && ownsPopupCancellation(message, sender)) {
+    await closeSession(); return { ok: true };
+  }
+  if (message.type === 'GET_SESSION' && await ownsUI(message, sender)) return { ok: true, state: await snapshot() };
+  if (await ownsUI(message, sender)) {
     if (message.type === 'UI_COMMIT') return commit(message.tabId);
     if (message.type === 'UI_CANCEL') { await closeSession(); return { ok: true }; }
     if (message.type === 'UI_SELECT' && session.candidateIds.includes(message.tabId)) {
@@ -266,6 +301,21 @@ async function onMessage(message, sender) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  if (message?.type === 'OPEN_OPTIONS') {
+    // Keep opening settings in the worker: closing a popup/removing its frame
+    // destroys the UI's context and any subsequent API call from that context.
+    // A genuine toolbar popup can open settings even if startup failed.
+    (async () => {
+      if (!await ownsUI(message, sender) && !await isToolbarPopup(sender)) return { ok: false };
+      const previousSessionId = session?.id;
+      await chrome.runtime.openOptionsPage();
+      if (previousSessionId && !startupFailed) await run(async () => {
+        if (session?.id === previousSessionId) await closeSession();
+      });
+      return { ok: true };
+    })().then(respond, () => respond({ ok: false, error: 'Settings could not be opened. Try again.' }));
+    return true;
+  }
   if (message?.type === 'DIAGNOSTICS' && sender.id === chrome.runtime.id && sender.url === chrome.runtime.getURL('options.html')) {
     Promise.resolve(ready).then(() => respond({ ok: true, version: chrome.runtime.getManifest().version,
       startupFailed, lastCommand, surface: session ? (session.embedded ? 'overlay' : 'toolbar') : null }));
@@ -312,7 +362,10 @@ chrome.tabs.onDetached.addListener(tabId => { enqueue(async () => {
   if (session?.candidateIds.includes(tabId)) await closeSession();
 }); });
 chrome.windows.onFocusChanged.addListener(windowId => { enqueue(async () => {
-  if (session && windowId !== session.ownerWindowId) await closeSession();
+  // The browser manages popup dismissal. A transient lack of window focus
+  // while opening the Extensions menu must not dismiss its popup ourselves.
+  if (session && windowId !== session.ownerWindowId &&
+    (session.embedded || windowId !== chrome.windows.WINDOW_ID_NONE)) await closeSession();
   if (windowId !== chrome.windows.WINDOW_ID_NONE) {
     const [tab] = await chrome.tabs.query({ active: true, windowId });
     if (tab) { touch(tab.id); await persist(); }

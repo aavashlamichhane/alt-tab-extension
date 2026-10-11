@@ -44,7 +44,7 @@ For Chrome, or to test the source version in Edge, download and extract this rep
 git clone https://github.com/aavashlamichhane/alt-tab-extension.git
 ```
 
-Changes to a local copy do not update an installed store copy. To load version 1.4.2 locally:
+Changes to a local copy do not update an installed store copy. To load version 1.4.3 locally:
 
 | Browser | Extensions page | Keyboard shortcut assignments |
 | --- | --- | --- |
@@ -53,7 +53,7 @@ Changes to a local copy do not update an installed store copy. To load version 1
 
 1. Open your browser's Extensions page from the table above and temporarily disable any older Edge Alt-Tab copy, so it does not claim the same shortcuts.
 2. Enable **Developer mode**, choose **Load unpacked**, and select the downloaded or cloned `alt-tab-extension` folder containing `manifest.json`. No build or npm installation is needed to load the project.
-3. Check that the new extension card shows **1.4.2**, its enable toggle is on, and it has no loading errors. If this exact folder is already loaded, click **Reload** on its card instead.
+3. Check that the new extension card shows **1.4.3**, its enable toggle is on, and it has no loading errors. If this exact folder is already loaded, click **Reload** on its card instead.
 4. Open your browser's shortcut assignments page from the table above. Assign **Alt+Q** to **Cycle through recently used tabs** and **Alt+Shift+Q** to **Cycle backwards through recently used tabs**. Check assignments even when the manifest supplies defaults: another installed copy can prevent registration.
 5. Reload the webpages you will test, especially Google Docs/Sheets, to install the updated frame bridge.
 6. Open at least two ordinary webpages in the same browser window, visit both, then hold Alt, press and release Q, and release Alt. The highlighted previous tab should activate. The toolbar icon opens a searchable popup with click/Enter confirmation.
@@ -62,7 +62,7 @@ After subsequent edits, click the extension card's **Reload**, then reload your 
 
 Microsoft's [sideloading guide](https://learn.microsoft.com/en-us/microsoft-edge/extensions-chromium/getting-started/extension-sideloading) describes loading and reloading unpacked extensions in Edge.
 
-The manifest version is 1.4.2. Existing Fluent/Simple and custom-accent preferences are retained. “Automatic” accent from older versions becomes accurately labelled default blue. The old durable tab-ID history is retired because IDs are specific to a browser session.
+The manifest version is 1.4.3. Existing Fluent/Simple and custom-accent preferences are retained. “Automatic” accent from older versions becomes accurately labelled default blue. The old durable tab-ID history is retired because IDs are specific to a browser session.
 
 ## Compatibility and privacy
 
@@ -95,7 +95,7 @@ npm test
 npm run package
 ```
 
-Packaging writes `dist/edge-alt-tab-1.4.2.zip`. It includes only runtime assets and the license, with deterministic ZIP timestamps. CI runs validation, unit regressions, browser checks, and packaging.
+Packaging writes `dist/edge-alt-tab-1.4.3.zip`. It includes only runtime assets and the license, with deterministic ZIP timestamps. CI runs validation, unit regressions, browser checks, and packaging.
 
 For isolated-browser checks:
 

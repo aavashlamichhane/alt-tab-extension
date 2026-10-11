@@ -1,14 +1,18 @@
 (() => {
-  const embedded = window !== window.top;
   let sessionId = location.hash.slice(1);
+  // Embedded switchers carry their session in the URL. Toolbar popup placement
+  // is browser-controlled and must not determine which initialization we send.
+  const embedded = Boolean(sessionId);
   let state = null;
   let visible = [];
   let searching = !embedded;
   let finished = false;
+  let openingSettings = false;
   let pendingRelease = null;
   let refreshing = false;
   let refreshAgain = false;
   let expiryTimer;
+  let popupPort = null;
   const list = document.getElementById('list');
   const search = document.getElementById('search');
   const status = document.getElementById('status');
@@ -17,6 +21,11 @@
   if (embedded) document.getElementById('switcher').setAttribute('aria-modal', 'true');
 
   async function send(type, extra = {}) {
+    if (!embedded && sessionId && !finished && !popupPort) {
+      popupPort = chrome.runtime.connect({ name: 'toolbar-switcher' });
+      popupPort.onDisconnect.addListener(() => { void chrome.runtime.lastError; popupPort = null; });
+      popupPort.postMessage({ sessionId });
+    }
     return chrome.runtime.sendMessage({ type, sessionId, ...extra });
   }
   function fail(text) {
@@ -131,13 +140,24 @@
   });
   document.getElementById('searchButton').addEventListener('click', event => { if (event.isTrusted) toggleSearch(!searching); });
   document.getElementById('settingsButton').addEventListener('click', async event => {
-    if (!event.isTrusted) return;
-    await cancel(); await chrome.runtime.openOptionsPage();
+    if (!event.isTrusted || openingSettings) return;
+    openingSettings = true;
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await send('OPEN_OPTIONS');
+      if (!result?.ok) throw new Error('Settings unavailable');
+      finish();
+    } catch {
+      openingSettings = false;
+      button.disabled = false;
+      fail('Settings could not be opened. Try again.');
+    }
   });
   search.addEventListener('input', event => { if (event.isTrusted) render(); });
   document.body.addEventListener('click', event => { if (embedded && event.target === document.body && event.isTrusted) void cancel(); });
   window.addEventListener('keydown', event => {
-    if (!event.isTrusted || finished || event.isComposing) return;
+    if (!event.isTrusted || finished || openingSettings || event.isComposing) return;
     if (event.key === 'Tab' && embedded && !event.ctrlKey && !event.altKey && !event.metaKey) {
       const controls = [...document.querySelectorAll('button, input, [tabindex="0"]')].filter(element => element.getClientRects().length);
       const index = controls.indexOf(document.activeElement);
@@ -147,7 +167,7 @@
       event.preventDefault();
       if (searching && search.value) { search.value = ''; render(); }
       else void cancel();
-    } else if (event.key === 'Enter') { event.preventDefault(); void commit(); }
+    } else if (event.key === 'Enter' && !event.target.closest?.('button')) { event.preventDefault(); void commit(); }
     else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); move(event.key === 'ArrowDown' ? 1 : -1); }
     else if (event.key === 'Home' && !searching && visible.length) { event.preventDefault(); select(visible[0].id); }
     else if (event.key === 'End' && !searching && visible.length) { event.preventDefault(); select(visible.at(-1).id); }
@@ -158,7 +178,7 @@
     // advance twice for one native shortcut dispatch.
   }, true);
   window.addEventListener('keyup', event => {
-    if (!event.isTrusted || finished || !['Alt', 'Control', 'Meta'].includes(event.key)) return;
+    if (!event.isTrusted || finished || openingSettings || !['Alt', 'Control', 'Meta'].includes(event.key)) return;
     pendingRelease = { key: event.key, at: Date.now() };
     if (state?.modifier === event.key && !searching) {
       event.preventDefault();

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.3
+
+- Keep the toolbar popup open through transient Extensions-menu focus changes and verify its browser popup context.
+- Clear dismissed popup sessions and let the next keyboard shortcut open a fresh overlay.
+- Open settings from the background worker before dismissing either the toolbar popup or page overlay. Settings remain available from the toolbar if tab-list startup fails.
+- Allow Enter to activate focused switcher buttons instead of switching tabs.
+- Add real-browser checks for toolbar content and settings navigation from both switcher surfaces.
+
 ## 1.4.2
 
 - Restore immediate switching on internal/restricted pages, matching the original flow. Keep the simpler centered overlay on ordinary webpages.
