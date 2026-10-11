@@ -1,226 +1,110 @@
-let overlayRoot = null;
-let currentHighlightIndex = 0;
-
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "PING") {
-    sendResponse({ ok: true });
-  } else if (message.type === "SHOW_OVERLAY") {
-    showOverlay(message.tabs, message.highlightIndex, message.settings);
-  } else if (message.type === "UPDATE_HIGHLIGHT") {
-    updateHighlight(message.highlightIndex);
+(() => {
+  // A stale listener can survive an extension update in an existing document.
+  // Reinjection replaces it instead of trusting a marker from an old context.
+  globalThis.__edgeAltTabBridge?.dispose?.();
+  let active = null;
+  let host = null;
+  let gesture = null;
+  let release = null;
+  let previousFocus = null;
+  let expiryTimer;
+  let readyTimer;
+  const isTop = window === window.top;
+  function send(message) {
+    try { return chrome.runtime.sendMessage(message).catch(() => { remove(); }); }
+    catch { remove(); return Promise.resolve(); }
   }
-});
-
-function getSecureFaviconUrl(tabUrl, cachedIcon) {
-  // If we have a cached base64 icon from the background, use it directly.
-  if (cachedIcon) return cachedIcon;
-  
-  // Fallback to Google proxy for public sites if cache is missing
-  try {
-    const url = new URL(tabUrl);
-    return `https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(url.origin)}`;
-  } catch (e) {
-    return "https://www.google.com/s2/favicons?sz=64&domain=microsoft.com";
+  function remove() {
+    const old = host;
+    host = null; active = null;
+    clearTimeout(expiryTimer); clearTimeout(readyTimer);
+    old?.remove();
+    if (old && previousFocus?.isConnected) {
+      try { previousFocus.focus({ preventScroll: true }); } catch { /* Frame may have navigated. */ }
+    }
+    previousFocus = null;
   }
-}
-
-function showOverlay(tabs, initialHighlightIndex, settings) {
-  if (overlayRoot) removeOverlay();
-
-  const isFluent = settings.theme === 'fluent';
-  const accentColor = settings.accentMode === 'manual' ? settings.manualAccentColor : '#0078d4';
-
-  overlayRoot = document.createElement("div");
-  overlayRoot.id = "edge-alt-tab-overlay-container";
-  const shadow = overlayRoot.attachShadow({ mode: "open" });
-
-  const style = document.createElement("style");
-  style.textContent = `
-    :host {
-      --accent-color: ${accentColor};
+  function arm(message) {
+    if (active?.sessionId !== message.sessionId) {
+      active = { sessionId: message.sessionId, modifier: message.modifier };
+      clearTimeout(expiryTimer);
+      expiryTimer = setTimeout(() => {
+        void send({ type: 'BRIDGE_CANCEL', sessionId: active?.sessionId }); remove();
+      }, Math.max(0, message.expiresAt - Date.now()));
     }
-    .overlay-container {
-      position: fixed;
-      top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(0, 0, 0, ${isFluent ? '0.45' : '0.6'});
-      display: flex; justify-content: center; align-items: center;
-      z-index: 2147483647;
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      transition: opacity 0.15s ease-out;
-    }
-    .overlay-container.closing {
-      opacity: 0;
-    }
-    .modal {
-      background: ${isFluent ? 'rgba(32, 33, 36, 0.75)' : '#252525'};
-      ${isFluent ? 'backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);' : ''}
-      border-radius: 12px;
-      padding: 12px;
-      min-width: 480px;
-      max-width: 720px;
-      max-height: 80vh;
-      overflow-y: auto;
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-      border: 1px solid ${isFluent ? 'rgba(255, 255, 255, 0.1)' : '#333'};
-      ${isFluent ? 'animation: fadeInScale 0.15s cubic-bezier(0.1, 0.9, 0.2, 1);' : ''}
-    }
-    @keyframes fadeInScale {
-      0% { opacity: 0; transform: scale(0.96); }
-      100% { opacity: 1; transform: scale(1); }
-    }
-    .modal::-webkit-scrollbar {
-      width: 6px;
-    }
-    .modal::-webkit-scrollbar-track {
-      background: transparent;
-    }
-    .modal::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.2);
-      border-radius: 10px;
-    }
-    .modal::-webkit-scrollbar-thumb:hover {
-      background: rgba(255, 255, 255, 0.3);
-    }
-    .tab-item {
-      display: flex;
-      align-items: center;
-      padding: 10px 14px;
-      border-radius: 8px;
-      color: rgba(255, 255, 255, 0.8);
-      margin-bottom: 2px;
-      transition: background 0.1s, transform 0.05s;
-      cursor: pointer;
-      border-left: 3px solid transparent;
-    }
-    .tab-item:hover {
-      background: rgba(255, 255, 255, 0.05);
-      color: #fff;
-    }
-    .tab-item.active {
-      background: rgba(255, 255, 255, 0.12);
-      color: #fff;
-      border-left-color: var(--accent-color);
-    }
-    .tab-icon {
-      width: 26px;
-      height: 26px;
-      margin-right: 14px;
-      flex-shrink: 0;
-      border-radius: 4px;
-      background: rgba(255, 255, 255, 0.05);
-    }
-    .tab-title {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      font-size: 14.5px;
-      font-weight: 400;
-    }
-  `;
-
-  const container = document.createElement("div");
-  container.className = "overlay-container";
-  container.onclick = () => cancelSwitch();
-
-  const modal = document.createElement("div");
-  modal.className = "modal";
-  modal.onclick = (e) => e.stopPropagation();
-
-  tabs.forEach((tab, index) => {
-    const item = document.createElement("div");
-    item.className = `tab-item ${index === initialHighlightIndex ? "active" : ""}`;
-    
-    item.onclick = (e) => {
-      e.stopPropagation();
-      currentHighlightIndex = index;
-      commitSwitch();
-    };
-    
-    const icon = document.createElement("img");
-    icon.className = "tab-icon";
-    icon.src = getSecureFaviconUrl(tab.url, tab.cachedIcon);
-    icon.onerror = () => {
-      icon.src = "https://www.google.com/s2/favicons?sz=64&domain=microsoft.com";
-    };
-
-    const title = document.createElement("span");
-    title.className = "tab-title";
-    title.textContent = tab.title || "New Tab";
-
-    item.appendChild(icon);
-    item.appendChild(title);
-    modal.appendChild(item);
-  });
-
-  container.appendChild(modal);
-  shadow.appendChild(style);
-  shadow.appendChild(container);
-  document.body.appendChild(overlayRoot);
-
-  currentHighlightIndex = initialHighlightIndex;
-  
-  window.addEventListener("keyup", handleKeyUp);
-  window.addEventListener("keydown", handleKeyDown);
-}
-
-function updateHighlight(index) {
-  if (!overlayRoot) return;
-  const shadow = overlayRoot.shadowRoot;
-  const items = shadow.querySelectorAll(".tab-item");
-  items.forEach((item, i) => {
-    const isActive = i === index;
-    item.classList.toggle("active", isActive);
-    if (isActive) {
-      item.scrollIntoView({ block: "nearest" });
-    }
-  });
-  currentHighlightIndex = index;
-}
-
-function handleKeyUp(e) {
-  if (e.key === "Alt") {
-    e.preventDefault();
-    e.stopPropagation();
-    commitSwitch();
+    if (gesture && release) void send({ type: 'KEY_SNAPSHOT', sessionId: active.sessionId, gesture, key: release.key, releasedAt: release.at });
   }
-}
-
-function handleKeyDown(e) {
-  if (e.key === "Escape") {
-    e.preventDefault();
-    e.stopPropagation();
-    cancelSwitch();
-  } else if (e.key === "q" || e.key === "Q") {
-    e.stopPropagation();
+  function show(message) {
+    remove();
+    previousFocus = document.activeElement;
+    arm(message);
+    const root = document.createElement('div');
+    root.id = 'edge-alt-tab-overlay-container';
+    // The top layer escapes transformed/contained page ancestors, which can
+    // otherwise make a fixed overlay move with the document instead of the viewport.
+    root.setAttribute('popover', 'manual');
+    document.getElementById(root.id)?.remove();
+    const shadow = root.attachShadow({ mode: 'closed' });
+    const frame = document.createElement('iframe');
+    frame.title = 'Recently used tabs';
+    frame.src = `${chrome.runtime.getURL('switcher.html')}#${message.sessionId}`;
+    frame.style.cssText = 'display:block;border:0;width:100%;height:100%;background:transparent;color-scheme:normal;';
+    // Page DOM contains an opaque extension frame, never other-tab metadata.
+    for (const [property, value] of Object.entries({ all: 'initial', position: 'fixed', inset: '0',
+      width: '100vw', height: '100vh', display: 'block', 'z-index': '2147483647',
+      margin: '0', padding: '0', border: '0', opacity: '1', visibility: 'visible' })) {
+      root.style.setProperty(property, value, 'important');
+    }
+    shadow.appendChild(frame); host = root;
+    (document.fullscreenElement || document.documentElement).appendChild(root);
+    root.showPopover();
+    frame.addEventListener('load', () => { if (host === root) frame.focus({ preventScroll: true }); }, { once: true });
+    void send({ type: 'HOST_READY', sessionId: message.sessionId });
+    readyTimer = setTimeout(() => {
+      if (active?.sessionId === message.sessionId) void send({ type: 'OVERLAY_TIMEOUT', sessionId: message.sessionId });
+    }, 2000);
   }
-}
-
-function commitSwitch() {
-  chrome.runtime.sendMessage({ type: "COMMIT_SWITCH", index: currentHighlightIndex });
-  removeOverlay();
-}
-
-function cancelSwitch() {
-  chrome.runtime.sendMessage({ type: "CANCEL_SWITCH" });
-  removeOverlay();
-}
-
-function removeOverlay() {
-  if (overlayRoot) {
-    const container = overlayRoot.shadowRoot.querySelector(".overlay-container");
-    if (container) {
-      container.classList.add("closing");
-      setTimeout(() => {
-        if (overlayRoot) {
-          overlayRoot.remove();
-          overlayRoot = null;
-        }
-      }, 150);
-    } else {
-      overlayRoot.remove();
-      overlayRoot = null;
+  function onRuntimeMessage(message, sender, respond) {
+    if (sender.id !== chrome.runtime.id) return;
+    if (message.type === 'PING' && isTop) respond({ ok: true });
+    else if (message.type === 'SHOW_SWITCHER' && isTop) {
+      try { show(message); respond({ ok: true }); }
+      catch { remove(); respond({ ok: false }); }
+    } else if (message.type === 'ARM_SESSION') { arm(message); respond({ ok: true }); }
+    else if (message.type === 'END_SESSION' && message.sessionId === active?.sessionId) { remove(); respond({ ok: true }); }
+  }
+  function onKeyDown(event) {
+    if (!event.isTrusted) return;
+    const modifier = event.altKey ? 'Alt' : event.ctrlKey ? 'Control' : event.metaKey ? 'Meta' : null;
+    if (modifier && !['Alt', 'Control', 'Meta', 'Shift'].includes(event.key) && !event.repeat && !event.getModifierState('AltGraph')) {
+      gesture = { key: event.key.toLowerCase(), modifier, shift: event.shiftKey, at: Date.now() }; release = null;
+    }
+    if (active && event.key === 'Escape') {
+      event.preventDefault(); event.stopImmediatePropagation();
+      void send({ type: 'BRIDGE_CANCEL', sessionId: active.sessionId, reason: 'escape' }); remove();
     }
   }
-  window.removeEventListener("keyup", handleKeyUp);
-  window.removeEventListener("keydown", handleKeyDown);
-}
+  function onKeyUp(event) {
+    if (!event.isTrusted || !['Alt', 'Control', 'Meta'].includes(event.key)) return;
+    release = { key: event.key, at: Date.now() };
+    if (active && event.key === active.modifier) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      void send({ type: 'KEY_RELEASE', sessionId: active.sessionId, key: event.key, gesture, releasedAt: release.at });
+    }
+  }
+  function onPageHide() {
+    if (active && isTop) void send({ type: 'BRIDGE_CANCEL', sessionId: active.sessionId }); remove();
+  }
+  function dispose() {
+    remove();
+    window.removeEventListener('keydown', onKeyDown, true);
+    window.removeEventListener('keyup', onKeyUp, true);
+    window.removeEventListener('pagehide', onPageHide);
+    try { chrome.runtime.onMessage.removeListener(onRuntimeMessage); } catch { /* Old context has been invalidated. */ }
+  }
+  globalThis.__edgeAltTabBridge = { dispose };
+  chrome.runtime.onMessage.addListener(onRuntimeMessage);
+  window.addEventListener('keydown', onKeyDown, true);
+  window.addEventListener('keyup', onKeyUp, true);
+  window.addEventListener('pagehide', onPageHide);
+})();

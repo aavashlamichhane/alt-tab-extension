@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recently used tabs</title>
+  <link rel="stylesheet" href="switcher.css">
+</head>
+<body>
+  <main id="switcher" role="dialog" aria-labelledby="heading" aria-describedby="hint">
+    <header>
+      <h1 id="heading">Recent tabs</h1>
+      <div class="actions">
+        <button id="searchButton" type="button" title="Search tabs (Ctrl+F or /)" aria-label="Search tabs" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg></button>
+        <button id="settingsButton" type="button" title="Settings" aria-label="Open settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.5"/><circle cx="15" cy="17" r="2.5"/></svg></button>
+      </div>
+    </header>
+    <div id="searchRow" hidden>
+      <label class="sr-only" for="search">Search tabs by title or address</label>
+      <input id="search" type="search" placeholder="Search title or address…" autocomplete="off" spellcheck="false">
+    </div>
+    <div id="list" role="listbox" tabindex="0" aria-label="Open tabs" aria-describedby="hint"></div>
+    <p id="empty" hidden>No matching tabs.</p>
+    <footer><span id="hint">Loading tabs…</span><span id="count"></span></footer>
+    <p id="status" class="sr-only" role="status" aria-live="polite"></p>
+  </main>
+  <script src="shared.js"></script>
+  <script src="switcher.js"></script>
+</body>
+</html>

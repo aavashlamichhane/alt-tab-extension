@@ -1,0 +1,12 @@
+{
+  "name": "edge-alt-tab",
+  "version": "1.4.2",
+  "private": true,
+  "scripts": {
+    "check": "node scripts/check.cjs",
+    "test": "node --test",
+    "test:browser": "node scripts/browser-smoke.cjs",
+    "package": "node scripts/package.cjs"
+  },
+  "devDependencies": { "playwright": "1.62.1" }
+}

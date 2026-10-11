@@ -1,53 +1,65 @@
-// Options page logic
-const themeSelect = document.getElementById('theme');
-const accentModeSelect = document.getElementById('accentMode');
-const manualColorInput = document.getElementById('manualAccentColor');
-const manualColorRow = document.getElementById('manualColorRow');
-const status = document.getElementById('status');
-const openShortcuts = document.getElementById('openShortcuts');
-
-// Load settings
-function loadSettings() {
-  chrome.storage.local.get({
-    theme: 'fluent',
-    accentMode: 'auto',
-    manualAccentColor: '#0078d4'
-  }, (items) => {
-    themeSelect.value = items.theme;
-    accentModeSelect.value = items.accentMode;
-    manualColorInput.value = items.manualAccentColor;
-    updateManualRowVisibility();
+(() => {
+  const fields = Object.keys(AltTab.DEFAULTS);
+  const status = document.getElementById('status');
+  let saveQueue = Promise.resolve();
+  function showStatus(text, error = false) { status.textContent = text; status.classList.toggle('error', error); }
+  function values() {
+    return AltTab.normalizeSettings(Object.fromEntries(fields.map(key => [key, document.getElementById(key).value])));
+  }
+  function preview() {
+    const preferences = values();
+    document.getElementById('manualColorRow').hidden = preferences.accentMode !== 'manual';
+    const sample = document.getElementById('preview');
+    sample.style.setProperty('--preview-accent', preferences.accentMode === 'manual' ? preferences.manualAccentColor : AltTab.DEFAULTS.manualAccentColor);
+    sample.style.padding = preferences.density === 'compact' ? '9px 12px' : '14px';
+    sample.style.background = preferences.appearance === 'light' ? '#fff' : preferences.appearance === 'dark' ? '#252830' : '';
+    sample.style.color = preferences.appearance === 'light' ? '#202124' : preferences.appearance === 'dark' ? '#eef0f4' : '';
+    sample.style.borderRadius = preferences.theme === 'fluent' ? '12px' : '6px';
+  }
+  function populate(preferences) {
+    for (const key of fields) document.getElementById(key).value = preferences[key];
+    preview();
+  }
+  function save() {
+    const preferences = values();
+    preview(); showStatus('Saving…');
+    saveQueue = saveQueue.catch(() => {}).then(async () => {
+      await chrome.storage.local.set(preferences); showStatus('Settings saved');
+    }).catch(() => showStatus('Settings could not be saved. Try again.', true));
+  }
+  async function loadShortcuts() {
+    const commands = await chrome.commands.getAll();
+    const container = document.getElementById('shortcuts'); container.replaceChildren();
+    const labels = { 'toggle-tab': 'Cycle forward', 'cycle-backward': 'Cycle backward', 'quick-switch': 'Immediate previous tab' };
+    for (const [name, label] of Object.entries(labels)) {
+      const term = document.createElement('dt'); term.textContent = label;
+      const value = document.createElement('dd'); value.textContent = commands.find(command => command.name === name)?.shortcut || 'Unassigned';
+      container.append(term, value);
+    }
+  }
+  document.getElementById('preferences').addEventListener('submit', event => event.preventDefault());
+  for (const key of fields) document.getElementById(key).addEventListener('change', save);
+  document.getElementById('manualAccentColor').addEventListener('input', preview);
+  document.getElementById('reset').addEventListener('click', () => { populate(AltTab.DEFAULTS); save(); });
+  document.getElementById('checkStatus').addEventListener('click', async () => {
+    const output = document.getElementById('diagnostics');
+    output.textContent = 'Checking…';
+    try {
+      const result = await chrome.runtime.sendMessage({ type: 'DIAGNOSTICS' });
+      if (!result?.ok) throw new Error('Status unavailable');
+      if (result.startupFailed) { output.textContent = `Version ${result.version}: startup failed. Reload the extension and check its service worker Console.`; return; }
+      const command = result.lastCommand;
+      output.textContent = `Version ${result.version}: background is ready. ` + (command
+        ? `Last shortcut: ${command.name} at ${new Date(command.at).toLocaleTimeString()}; result: ${command.result}.`
+        : 'No shortcut has been recorded. Try your assigned shortcut, then check again.');
+    } catch { output.textContent = 'Background did not respond. Reload the extension and reopen settings.'; }
   });
-}
-
-// Save settings
-function saveSettings() {
-  chrome.storage.local.set({
-    theme: themeSelect.value,
-    accentMode: accentModeSelect.value,
-    manualAccentColor: manualColorInput.value
-  }, () => {
-    status.classList.add('show');
-    setTimeout(() => status.classList.remove('show'), 2000);
+  document.getElementById('openShortcuts').addEventListener('click', async () => {
+    try { await chrome.tabs.create({ url: navigator.userAgent.includes('Edg/') ? 'edge://extensions/shortcuts' : 'chrome://extensions/shortcuts' }); }
+    catch { showStatus('Open your browser extensions page to change shortcuts.', true); }
   });
-}
-
-function updateManualRowVisibility() {
-  manualColorRow.style.display = accentModeSelect.value === 'manual' ? 'flex' : 'none';
-}
-
-themeSelect.onchange = saveSettings;
-accentModeSelect.onchange = () => {
-  updateManualRowVisibility();
-  saveSettings();
-};
-manualColorInput.onchange = saveSettings;
-
-openShortcuts.onclick = (e) => {
-  e.preventDefault();
-  const isEdge = navigator.userAgent.includes("Edg/");
-  const url = isEdge ? "edge://extensions/shortcuts" : "chrome://extensions/shortcuts";
-  chrome.tabs.create({ url });
-};
-
-document.addEventListener('DOMContentLoaded', loadSettings);
+  window.addEventListener('focus', () => { void loadShortcuts().catch(() => showStatus('Shortcuts could not be read.', true)); });
+  void Promise.all([
+    chrome.storage.local.get(AltTab.DEFAULTS).then(saved => populate(AltTab.normalizeSettings(saved))), loadShortcuts()
+  ]).catch(() => showStatus('Settings could not be loaded. Reload this page.', true));
+})();

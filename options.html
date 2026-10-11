@@ -1,102 +1,56 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Edge Alt-Tab Settings</title>
-  <style>
-    body {
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      background-color: #1a1a1a;
-      color: #e0e0e0;
-      padding: 30px;
-      max-width: 600px;
-      margin: 0 auto;
-    }
-    h1 { font-size: 24px; font-weight: 600; margin-bottom: 20px; color: #fff; }
-    .section {
-      background: #252525;
-      padding: 20px;
-      border-radius: 12px;
-      margin-bottom: 20px;
-      border: 1px solid #333;
-    }
-    .section-title { font-size: 16px; font-weight: 600; margin-bottom: 15px; color: #fff; display: block; }
-    .setting-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; }
-    .setting-label { font-size: 14px; color: #ccc; }
-    .description { font-size: 12px; color: #888; margin-top: 5px; }
-    
-    select, input[type="color"] {
-      background: #333;
-      border: 1px solid #444;
-      color: #fff;
-      padding: 8px 12px;
-      border-radius: 6px;
-      outline: none;
-    }
-    input[type="color"] { padding: 2px; width: 50px; height: 34px; border: none; cursor: pointer; }
-
-    .shortcut-link {
-      color: #0078d4;
-      text-decoration: none;
-      font-size: 14px;
-    }
-    .shortcut-link:hover { text-decoration: underline; }
-
-    .save-status {
-      font-size: 14px;
-      color: #4caf50;
-      opacity: 0;
-      transition: opacity 0.3s;
-      margin-left: 10px;
-    }
-    .save-status.show { opacity: 1; }
-  </style>
+  <link rel="stylesheet" href="options.css">
 </head>
 <body>
-  <h1>Alt-Tab Settings</h1>
-
-  <div class="section">
-    <label class="section-title">Visual Theme</label>
-    <div class="setting-row">
-      <div>
-        <span class="setting-label">Overlay Theme</span>
-        <div class="description">Fluent includes acrylic blur and animations. Simple is faster.</div>
-      </div>
-      <select id="theme">
-        <option value="fluent">Fluent (Modern)</option>
-        <option value="simple">Simple (Classic)</option>
-      </select>
-    </div>
-  </div>
-
-  <div class="section">
-    <label class="section-title">Accent Color</label>
-    <div class="setting-row">
-      <span class="setting-label">Accent Color Mode</span>
-      <select id="accentMode">
-        <option value="manual">Manual</option>
-        <option value="auto">Automatic (Browser Theme)</option>
-      </select>
-    </div>
-    <div class="setting-row" id="manualColorRow">
-      <span class="setting-label">Choose Color</span>
-      <input type="color" id="manualAccentColor" value="#0078d4">
-    </div>
-    <div class="description">Automatic mode matches the accent color to your browser theme where possible.</div>
-  </div>
-
-  <div class="section">
-    <label class="section-title">Keyboard Shortcut</label>
-    <div class="setting-row">
-      <span class="setting-label">Current: Alt + Q</span>
-      <a href="#" id="openShortcuts" class="shortcut-link">Change Shortcut</a>
-    </div>
-    <div class="description">Standard browser shortcuts (like Ctrl+Tab) are reserved and cannot be used by extensions.</div>
-  </div>
-
-  <div style="display: flex; align-items: center; justify-content: flex-end;">
-    <span id="status" class="save-status">Settings saved!</span>
-  </div>
-
-  <script src="options.js"></script>
+  <main>
+    <p class="eyebrow">EDGE ALT-TAB</p>
+    <h1>Your tabs, a shortcut away.</h1>
+    <p class="intro">Hold your shortcut modifier, cycle through recent tabs, then release it to switch. Use the toolbar for search and pages that cannot show an overlay.</p>
+    <form id="preferences">
+      <section aria-labelledby="behaviorHeading">
+        <h2 id="behaviorHeading">Switching</h2>
+        <div class="setting-row"><label for="switchMode">Shortcut behavior</label><select id="switchMode">
+          <option value="hold">Release modifier to switch</option>
+          <option value="confirm">Press Enter to switch</option>
+          <option value="instant">Switch immediately to previous tab</option>
+        </select></div>
+        <p class="description">Enter and Escape also work in the switcher. Search uses Enter to confirm. On browser pages, the shortcut switches immediately to the previous tab.</p>
+        <div class="setting-row"><label for="windowScope">Include tabs from</label><select id="windowScope">
+          <option value="current">Current window</option><option value="all">All windows</option>
+        </select></div>
+        <p class="description">All windows mode also focuses the selected tab's window. Normal and private tabs are kept separate.</p>
+      </section>
+      <section aria-labelledby="appearanceHeading">
+        <h2 id="appearanceHeading">Appearance</h2>
+        <div class="setting-row"><label for="theme">Visual style</label><select id="theme"><option value="simple">Simple</option><option value="fluent">Fluent · subtle blur and animation</option></select></div>
+        <div class="setting-row"><label for="appearance">Color theme</label><select id="appearance"><option value="system">Follow system</option><option value="dark">Dark</option><option value="light">Light</option></select></div>
+        <div class="setting-row"><label for="density">Row spacing</label><select id="density"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></div>
+        <div class="setting-row"><label for="accentMode">Accent color</label><select id="accentMode"><option value="auto">Default blue</option><option value="manual">Custom color</option></select></div>
+        <div class="setting-row" id="manualColorRow" hidden><label for="manualAccentColor">Custom accent</label><input type="color" id="manualAccentColor" value="#0078d4"></div>
+        <div id="preview" aria-label="Appearance preview"><span class="preview-icon">↔</span><div><strong>Example tab</strong><small>example.com · selected</small></div></div>
+        <p class="description">Reduced motion and system high-contrast preferences are respected.</p>
+      </section>
+      <section aria-labelledby="shortcutsHeading">
+        <h2 id="shortcutsHeading">Keyboard shortcuts</h2>
+        <dl id="shortcuts"><dt>Loading assigned shortcuts…</dt></dl>
+        <button type="button" id="openShortcuts">Change shortcuts</button>
+        <p class="description">An unassigned shortcut may conflict with another extension. Browser and operating-system shortcuts can take priority. The immediate previous-tab command is optional.</p>
+      </section>
+      <section aria-labelledby="diagnosticsHeading">
+        <h2 id="diagnosticsHeading">Troubleshooting</h2>
+        <p class="description">After trying a shortcut, check whether Edge delivered it to this extension. This status contains no tab titles or addresses.</p>
+        <button type="button" id="checkStatus">Check extension status</button>
+        <p id="diagnostics" class="description" role="status" aria-live="polite"></p>
+      </section>
+      <div class="bottom-row"><button type="button" id="reset">Reset defaults</button><span id="status" role="status" aria-live="polite"></span></div>
+    </form>
+    <p class="footnote">Settings save automatically. Tab order stays in this browser session; after a browser restart it is reconstructed from browser access times. No external favicon service is used.</p>
+  </main>
+  <script src="shared.js"></script><script src="options.js"></script>
 </body>
 </html>
