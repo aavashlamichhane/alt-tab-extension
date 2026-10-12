@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.5
+
+- Default the forward shortcut to direct previous-tab switching on internal Edge and Chrome pages in release-to-switch mode. Quick taps no longer wait for popup focus or need mouse confirmation.
+- Keep the backward shortcut and toolbar chooser available. Once a keyboard chooser is open, both forward and backward shortcuts cycle within it.
+- Add a setting to retain the forward-shortcut popup. Preserve Enter-confirm/instant modes and ordinary-page hold-to-switch behavior.
+- Verify fast internal-page gestures, repeated MRU toggling, window/privacy boundaries, chooser cycling, and the saved preference alongside existing regressions.
+
 ## 1.4.4
 
 - Open the browser's toolbar switcher on internal Edge and Chrome pages, preserving MRU order, forward/reverse selection, and switching mode without injecting scripts into browser pages.

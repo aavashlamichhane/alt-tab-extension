@@ -250,7 +250,7 @@ let profile;
   await until(() => worker.evaluate(async () => (await chrome.runtime.getContexts({ contextTypes: ['POPUP'] })).length), value => value === 0);
   console.log('PASS: real toolbar popup renders its search/tab list and Settings reuses the options tab');
 
-  async function attachKeyboardPopup(page, command = 'toggle-tab') {
+  async function settleInternalPage(page) {
     // Settings can redirect after navigation resolves. Start the gesture only
     // once its owning tab has finished that navigation, just as on webpages.
     await page.waitForLoadState('load');
@@ -259,6 +259,9 @@ let profile;
       if (page.url() !== stableURL) { stableURL = page.url(); stableSince = Date.now(); }
       return Promise.resolve(Date.now() - stableSince > 350);
     });
+  }
+  async function attachKeyboardPopup(page, command = 'cycle-backward') {
+    await settleInternalPage(page);
     await editor.bringToFront(); await page.bringToFront();
     await worker.evaluate(name => run(() => handleCommand(name)), command);
     const active = await until(() => worker.evaluate(async () => { await queue; return session; }),
@@ -284,24 +287,39 @@ let profile;
   }
   for (const route of ['version', 'settings/', 'extensions/', 'history/', 'newtab/']) {
     const restriction = await context.newPage(); await restriction.goto(`${internalPrefix}://${route}`);
+    await settleInternalPage(restriction);
+    await editor.bringToFront(); await restriction.bringToFront();
+    await restriction.keyboard.down('Alt'); await restriction.keyboard.press('q'); await restriction.keyboard.up('Alt');
+    await worker.evaluate(async () => {
+      await queue;
+      // Preserve real rapid key events even when headless native command
+      // dispatch is unavailable. No popup focus or mouse is needed here.
+      const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      if (/^(edge|chrome):/.test(tab.url)) await run(() => handleCommand('toggle-tab', tab));
+    });
+    assert.equal(await worker.evaluate(async () => { await queue; return session; }), null);
+    assert.equal(await worker.evaluate(async () => (await chrome.runtime.getContexts({ contextTypes: ['POPUP'] })).length), 0);
+    assert.equal(await worker.evaluate(async id => (await chrome.tabs.get(id)).active, ids['/editor']), true);
     const active = await attachKeyboardPopup(restriction);
-    assert.equal(active.selectedTabId, ids['/editor']);
     // Release is delivered to the real browser popup, never to a fake bridge.
     await popupKey('Alt', 'AltLeft', 18, 'keyUp'); await waitForPopupClosed();
-    assert.equal(await worker.evaluate(async id => (await chrome.tabs.get(id)).active, ids['/editor']), true);
+    assert.equal(await worker.evaluate(async id => (await chrome.tabs.get(id)).active, active.selectedTabId), true);
     const reverse = await attachKeyboardPopup(restriction, 'cycle-backward');
     await worker.evaluate(() => run(() => handleCommand('cycle-backward')));
     await until(() => popupEvaluate('Number(document.querySelector("[aria-selected=true]").id.slice(4))'),
       value => value !== reverse.selectedTabId);
+    await worker.evaluate(() => run(() => handleCommand('toggle-tab')));
+    await until(() => popupEvaluate('Number(document.querySelector("[aria-selected=true]").id.slice(4))'),
+      value => value === reverse.selectedTabId);
     await popupKey('ArrowDown', 'ArrowDown', 40);
     await popupKey('Escape', 'Escape', 27); await waitForPopupClosed();
     assert.equal(await restriction.evaluate(() => document.hasFocus()), true);
-    await attachKeyboardPopup(restriction);
+    const confirmed = await attachKeyboardPopup(restriction);
     await popupKey('Enter', 'Enter', 13); await waitForPopupClosed();
-    assert.equal(await worker.evaluate(async id => (await chrome.tabs.get(id)).active, ids['/editor']), true);
+    assert.equal(await worker.evaluate(async id => (await chrome.tabs.get(id)).active, confirmed.selectedTabId), true);
     await restriction.close();
   }
-  console.log(`PASS: ${internalPrefix} internal version/settings/extensions/history/new-tab pages display the popup; Alt release, reverse cycling, arrows, Escape, and Enter work`);
+  console.log(`PASS: ${internalPrefix} internal version/settings/extensions/history/new-tab pages quick-switch without a popup; reverse chooser supports forward/reverse cycling, release, arrows, Escape, and Enter`);
 
   const settingsSource = await context.newPage(); await settingsSource.goto(`${internalPrefix}://settings/`);
   await attachKeyboardPopup(settingsSource);
@@ -316,6 +334,25 @@ let profile;
   assert.equal(await waitForSettings(), options); await waitForPopupClosed();
   await settingsSource.close();
   console.log('PASS: internal-page keyboard popup search pauses release switching and Settings remains usable');
+
+  // The explicit popup preference preserves the 1.4.4 forward-shortcut flow.
+  await options.locator('#internalPageMode').selectOption('popup');
+  await options.waitForFunction(() => document.getElementById('status').textContent === 'Settings saved');
+  await until(() => worker.evaluate(async () => { await queue; return settings.internalPageMode; }), value => value === 'popup');
+  const preferenceSource = await context.newPage(); await preferenceSource.goto(`${internalPrefix}://settings/`);
+  const preferred = await attachKeyboardPopup(preferenceSource, 'toggle-tab');
+  assert.equal(preferred.selectedTabId, ids['/editor']);
+  await popupKey('Escape', 'Escape', 27); await waitForPopupClosed();
+  await preferenceSource.close(); await options.bringToFront();
+  await options.locator('#switchMode').selectOption('confirm');
+  await options.waitForFunction(() => document.getElementById('status').textContent === 'Settings saved');
+  assert.equal(await options.locator('#internalPageMode').isDisabled(), true);
+  await options.locator('#switchMode').selectOption('hold');
+  await options.waitForFunction(() => document.getElementById('status').textContent === 'Settings saved');
+  await options.locator('#internalPageMode').selectOption('quick');
+  await options.waitForFunction(() => document.getElementById('status').textContent === 'Settings saved');
+  await until(() => worker.evaluate(async () => { await queue; return settings.internalPageMode; }), value => value === 'quick');
+  console.log('PASS: internal-page quick/popup preference saves and respects Enter-confirm mode');
 
   const popupSource = await context.newPage(); await popupSource.goto(`${internalPrefix}://settings/`);
   await popupSource.bringToFront(); await worker.evaluate(() => chrome.action.openPopup());

@@ -19,7 +19,12 @@
           <option value="confirm">Press Enter to switch</option>
           <option value="instant">Switch immediately to previous tab</option>
         </select></div>
-        <p class="description">Enter and Escape also work in the switcher. Search uses Enter to confirm. Internal Edge and Chrome pages use a toolbar popup. If the modifier was released before it opened, press Enter or click a tab.</p>
+        <p class="description">Enter and Escape also work in the switcher. Search uses Enter to confirm.</p>
+        <div class="setting-row"><label for="internalPageMode">Forward shortcut on internal pages</label><select id="internalPageMode">
+          <option value="quick">Switch immediately to previous tab</option>
+          <option value="popup">Open the tab chooser</option>
+        </select></div>
+        <p class="description">In release-to-switch mode, internal Edge and Chrome pages switch directly by default. The backward shortcut still opens the chooser; either shortcut then cycles within it. With the default shortcuts, use Alt+Q for a quick switch and Alt+Shift+Q for the chooser. The toolbar also opens it. Enter-confirm mode always opens the chooser. If a popup misses an early modifier release, press Enter.</p>
         <div class="setting-row"><label for="windowScope">Include tabs from</label><select id="windowScope">
           <option value="current">Current window</option><option value="all">All windows</option>
         </select></div>

@@ -202,6 +202,12 @@ async function handleCommand(command, invokedTab) {
     const index = session.candidateIds.indexOf(session.selectedTabId);
     session.selectedTabId = session.candidateIds[(index + direction + session.candidateIds.length) % session.candidateIds.length];
     await persist(); await broadcastState();
+  } else if (command === 'toggle-tab' && settings.switchMode === 'hold' && settings.internalPageMode === 'quick' &&
+    !/^(https?|file):/i.test(tab.url || '')) {
+    // Browser pages cannot report a fast modifier release before popup focus.
+    // Use the direct previous-tab path for forward gestures; the reverse
+    // command still opens a chooser, whose later commands continue cycling.
+    await startSession(tab, { instant: true });
   } else await startSession(tab, { direction });
 }
 function isUI(sender) {
