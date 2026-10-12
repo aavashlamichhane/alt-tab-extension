@@ -123,7 +123,7 @@ test('Edge and Chrome internal pages open one popup preserving reverse selection
 
 test('unsupported or rejected popup API falls back exactly once without a stuck session', async () => {
   for (const unavailable of [undefined, async () => { throw Error('Popup unavailable'); }]) {
-    const f = fixture({ preferences: { internalPageMode: 'popup' } }); f.tabs[0].url = 'chrome://settings/'; f.chrome.action.openPopup = unavailable;
+    const f = fixture(); f.tabs[0].url = 'chrome://settings/'; f.chrome.action.openPopup = unavailable;
     await f.command('toggle-tab'); assert.equal(f.state(), null);
     assert.deepEqual(f.calls.updates, [{ id: 2, active: true }]);
     assert.equal(f.sessionData.lastCommand.result, 'completed');
@@ -131,7 +131,7 @@ test('unsupported or rejected popup API falls back exactly once without a stuck 
 });
 
 test('popup startup watchdog switches only while its original session is pending', async () => {
-  const f = fixture({ preferences: { internalPageMode: 'popup' } }); f.tabs[0].url = 'edge://settings/'; await f.command('toggle-tab');
+  const f = fixture(); f.tabs[0].url = 'edge://settings/'; await f.command('toggle-tab');
   const pendingId = f.state().id;
   await f.evaluate(`run(() => popupStartTimedOut('${pendingId}'))`);
   assert.equal(f.state(), null); assert.deepEqual(f.calls.updates, [{ id: 2, active: true }]);
@@ -157,7 +157,7 @@ test('internal confirm, search, instant mode, and remapped shortcuts retain thei
   assert.deepEqual(confirm.calls.updates, []);
   await confirm.message({ type: 'UI_COMMIT', sessionId: result.state.sessionId, tabId: 2 }, sender);
   assert.equal(confirm.calls.updates.length, 1);
-  const remapped = fixture({ preferences: { internalPageMode: 'popup' } }); remapped.tabs[0].url = 'chrome://version/';
+  const remapped = fixture(); remapped.tabs[0].url = 'chrome://version/';
   remapped.chrome.commands.bindings[0].shortcut = 'Ctrl+Shift+Y'; await remapped.command('toggle-tab');
   const popup = remapped.popup(); await remapped.message({ type: 'OPEN_POPUP' }, popup); const sessionId = remapped.state().id;
   assert.equal(remapped.state().modifier, 'Control');
@@ -170,13 +170,13 @@ test('internal confirm, search, instant mode, and remapped shortcuts retain thei
 });
 
 test('worker startup discards a vanished popup without switching a tab', async () => {
-  const first = fixture({ preferences: { internalPageMode: 'popup' } }); first.tabs[0].url = 'chrome://settings/'; await first.command('toggle-tab');
+  const first = fixture(); first.tabs[0].url = 'chrome://settings/'; await first.command('toggle-tab');
   const restored = fixture({ saved: first.sessionData, tabs: first.tabs }); await restored.flush();
   assert.equal(restored.state(), null); assert.deepEqual(restored.calls.updates, []);
 });
 
 test('worker restart retains a live keyboard popup without opening it again', async () => {
-  const first = fixture({ preferences: { internalPageMode: 'popup' } }); first.tabs[0].url = 'edge://settings/'; await first.command('toggle-tab');
+  const first = fixture(); first.tabs[0].url = 'edge://settings/'; await first.command('toggle-tab');
   const sender = first.popup(); await first.message({ type: 'OPEN_POPUP' }, sender);
   const restored = fixture({ saved: first.sessionData, tabs: first.tabs }); restored.popup(); await restored.flush();
   assert.equal(restored.state().id, first.state().id); assert.deepEqual(restored.calls.popups, []);
@@ -194,9 +194,9 @@ test('internal popup cancellation on navigation, tab change, or window change pr
   }
 });
 
-test('quick internal forward gestures activate the previous tab without popup startup or modifier release', async () => {
-  for (const url of ['edge://settings/', 'chrome://settings/', 'edge://newtab/', 'chrome://history/']) {
-    const f = fixture(); f.tabs[0].url = url;
+test('instant mode activates the previous tab without a chooser or modifier release on every page type', async () => {
+  for (const url of ['https://one.test/', 'edge://settings/', 'chrome://settings/', 'edge://newtab/', 'chrome://history/']) {
+    const f = fixture({ preferences: { switchMode: 'instant' } }); f.tabs[0].url = url;
     f.chrome.commands.getAll = async () => { throw Error('The quick path must not wait for shortcut bindings'); };
     await f.command('toggle-tab');
     assert.equal(f.state(), null); assert.equal(f.calls.updates[0].id, 2);
@@ -206,14 +206,14 @@ test('quick internal forward gestures activate the previous tab without popup st
   }
 });
 
-test('repeated quick gestures on internal tabs toggle MRU without leaving a hidden session', async () => {
-  const f = fixture(); f.tabs[0].url = 'edge://settings/'; f.tabs[1].url = 'edge://history/';
+test('repeated instant gestures toggle MRU without leaving a hidden session', async () => {
+  const f = fixture({ preferences: { switchMode: 'instant' } }); f.tabs[0].url = 'edge://settings/'; f.tabs[1].url = 'edge://history/';
   await f.command('toggle-tab'); await f.command('toggle-tab'); await f.command('toggle-tab');
   assert.deepEqual(f.calls.updates.map(update => update.id), [2, 1, 2]);
   assert.equal(f.state(), null); assert.deepEqual(f.calls.popups, []);
 });
 
-test('a reverse chooser still cycles forward in quick mode instead of performing an instant switch', async () => {
+test('a reverse chooser cycles forward without an instant switch on internal pages', async () => {
   const f = fixture(); f.tabs[0].url = 'chrome://settings/'; await f.command('cycle-backward');
   const sender = f.popup(); const result = await f.message({ type: 'OPEN_POPUP' }, sender);
   assert.equal(f.state().selectedTabId, 3);
@@ -223,14 +223,39 @@ test('a reverse chooser still cycles forward in quick mode instead of performing
   assert.equal(f.calls.updates[0].id, 1); assert.equal(f.calls.popups.length, 1);
 });
 
-test('internal quick gestures honor all-window/private boundaries and single-tab windows', async () => {
-  const all = fixture({ preferences: { windowScope: 'all' } }); all.tabs[0].url = 'chrome://settings/';
+test('instant gestures honor all-window/private boundaries and single-tab windows', async () => {
+  const all = fixture({ preferences: { windowScope: 'all', switchMode: 'instant' } }); all.tabs[0].url = 'chrome://settings/';
   await all.command('toggle-tab'); assert.equal(all.calls.updates[0].id, 4);
   assert.deepEqual(all.calls.windows, [{ id: 20, focused: true }]);
-  const one = fixture({ tabs: [{ id: 1, windowId: 10, active: true, incognito: false, url: 'edge://settings/' },
+  const one = fixture({ preferences: { switchMode: 'instant' }, tabs: [{ id: 1, windowId: 10, active: true, incognito: false, url: 'edge://settings/' },
     { id: 2, windowId: 10, active: true, incognito: true, url: 'edge://history/' }] });
   await one.command('toggle-tab'); assert.equal(one.state(), null);
   assert.deepEqual(one.calls.updates, []); assert.deepEqual(one.calls.popups, []);
+});
+
+test('forward and reverse shortcuts use the same switching policy on webpages and internal pages', async () => {
+  for (const url of ['https://one.test/', 'edge://settings/', 'chrome://settings/']) {
+    for (const mode of ['hold', 'confirm']) {
+      for (const command of ['toggle-tab', 'cycle-backward']) {
+        const f = fixture({ preferences: { switchMode: mode, internalPageMode: 'quick' } }); f.tabs[0].url = url;
+        await f.command(command); const active = f.state();
+        assert.ok(active); assert.deepEqual(f.calls.updates, []);
+        assert.equal(active.selectedTabId, command === 'toggle-tab' ? 2 : 3);
+        assert.equal(active.modifier, mode === 'hold' ? 'Alt' : null);
+        assert.equal(f.localData.internalPageMode, undefined);
+        const sender = active.embedded ? f.ui() : f.popup();
+        const result = await f.message({ type: active.embedded ? 'UI_READY' : 'OPEN_POPUP', sessionId: active.id }, sender);
+        assert.deepEqual(result.state.binding, active.binding);
+        assert.equal(result.state.sessionId, active.id);
+        await f.message({ type: 'UI_RELEASE', sessionId: active.id, key: 'Alt' }, sender);
+        if (mode === 'confirm') {
+          assert.deepEqual(f.calls.updates, []);
+          await f.message({ type: 'UI_COMMIT', sessionId: active.id, tabId: active.selectedTabId }, sender);
+        }
+        assert.equal(f.calls.updates[0].id, active.selectedTabId);
+      }
+    }
+  }
 });
 
 test('internal-page tabs remain available as switch targets on normal webpages', async () => {

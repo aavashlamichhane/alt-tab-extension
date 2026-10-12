@@ -1,6 +1,6 @@
 (() => {
   const DEFAULTS = Object.freeze({ theme: 'simple', appearance: 'system', density: 'comfortable',
-    accentMode: 'auto', manualAccentColor: '#0078d4', windowScope: 'current', switchMode: 'hold', internalPageMode: 'quick' });
+    accentMode: 'auto', manualAccentColor: '#0078d4', windowScope: 'current', switchMode: 'hold' });
   const choice = (value, allowed, fallback) => allowed.includes(value) ? value : fallback;
   function normalizeSettings(value = {}) {
     return {
@@ -10,8 +10,7 @@
       accentMode: choice(value.accentMode, ['auto', 'manual'], DEFAULTS.accentMode),
       manualAccentColor: /^#[0-9a-f]{6}$/i.test(value.manualAccentColor || '') ? value.manualAccentColor : DEFAULTS.manualAccentColor,
       windowScope: choice(value.windowScope, ['current', 'all'], DEFAULTS.windowScope),
-      switchMode: choice(value.switchMode, ['hold', 'confirm', 'instant'], DEFAULTS.switchMode),
-      internalPageMode: choice(value.internalPageMode, ['quick', 'popup'], DEFAULTS.internalPageMode)
+      switchMode: choice(value.switchMode, ['hold', 'confirm', 'instant'], DEFAULTS.switchMode)
     };
   }
   function parseShortcut(shortcut = '') {

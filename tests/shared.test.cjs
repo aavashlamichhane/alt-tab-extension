@@ -12,8 +12,7 @@ test('settings reject malformed values and preserve valid legacy preferences', (
   const result = AltTab.normalizeSettings({ theme: 'simple', manualAccentColor: 'red; background:url(https://bad.test)', windowScope: 'invalid' });
   assert.equal(result.theme, 'simple'); assert.equal(result.manualAccentColor, '#0078d4'); assert.equal(result.windowScope, 'current');
   assert.equal(AltTab.normalizeSettings({ manualAccentColor: '#abcdef' }).manualAccentColor, '#abcdef');
-  assert.equal(AltTab.normalizeSettings({ internalPageMode: 'invalid' }).internalPageMode, 'quick');
-  assert.equal(AltTab.normalizeSettings({ internalPageMode: 'popup' }).internalPageMode, 'popup');
+  assert.equal('internalPageMode' in AltTab.normalizeSettings({ internalPageMode: 'quick' }), false);
 });
 test('favicon resources stay local and retain complete page identity', () => {
   const docs = AltTab.faviconURL({ url: 'https://docs.google.com/document/d/1?x=a&y=b' }, runtime);

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.6
+
+- Use the same forward/backward shortcuts and global switching mode on ordinary webpages and internal Edge/Chrome pages. Remove the internal-page override and its setting from 1.4.5.
+- Capture trusted key releases before styles and UI initialization finish. Recover releases during startup, including shortcut-key releases showing the modifier is already up; preserve held modifiers and prioritize early cancellation.
+- Test switching policy across page types and delayed-popup release/cancellation in real browser targets. Retain global instant mode for direct switching on every page.
+
 ## 1.4.5
 
 - Default the forward shortcut to direct previous-tab switching on internal Edge and Chrome pages in release-to-switch mode. Quick taps no longer wait for popup focus or need mouse confirmation.

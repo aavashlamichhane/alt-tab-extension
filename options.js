@@ -8,7 +8,6 @@
   }
   function preview() {
     const preferences = values();
-    document.getElementById('internalPageMode').disabled = preferences.switchMode !== 'hold';
     document.getElementById('manualColorRow').hidden = preferences.accentMode !== 'manual';
     const sample = document.getElementById('preview');
     sample.style.setProperty('--preview-accent', preferences.accentMode === 'manual' ? preferences.manualAccentColor : AltTab.DEFAULTS.manualAccentColor);

@@ -1,6 +1,6 @@
 # Privacy Policy: Edge Alt-Tab
 
-**Effective date: October 12, 2026 · Version 1.4.5**
+**Effective date: October 12, 2026 · Version 1.4.6**
 
 Edge Alt-Tab helps you switch between open Microsoft Edge tabs in most-recently-used order. This policy describes the extension's data handling, including its optional use in Chrome.
 
@@ -24,7 +24,7 @@ Use **Reset defaults** in settings to reset preferences. Closing the switcher cl
 
 ## Network and third parties
 
-Version 1.4.5 does not request icons from Google or another external favicon proxy. It uses the browser's local favicon resource and a bundled fallback. Ordinary page loading and the browser's own favicon fetching/caching, extension updates, and store services remain governed by the browser/store and website policies.
+Version 1.4.6 does not request icons from Google or another external favicon proxy. It uses the browser's local favicon resource and a bundled fallback. Ordinary page loading and the browser's own favicon fetching/caching, extension updates, and store services remain governed by the browser/store and website policies.
 
 The extension has no analytics, advertising, tracking services, remote code, or extension-operated external data service. It does not transmit tab metadata or shortcut-event information to the developer or third parties. Local diagnostic warnings identify failure categories without printing browsing URLs.
 
