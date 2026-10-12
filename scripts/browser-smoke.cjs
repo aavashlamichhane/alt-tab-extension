@@ -189,22 +189,7 @@ let profile;
   assert.equal(await worker.evaluate(async id => (await chrome.tabs.get(id)).active, ids['/editor']), true);
   console.log('PASS: closing selected tab cancels without switching elsewhere');
 
-  const restriction = await context.newPage(); await restriction.goto('chrome://version');
-  await restriction.bringToFront();
-  await worker.evaluate(async () => { await run(() => handleCommand('toggle-tab')); });
-  assert.equal(await worker.evaluate(() => session), null);
-  assert.equal(await worker.evaluate(async () => (await chrome.runtime.getContexts({ contextTypes: ['POPUP'] })).length), 0);
-  assert.equal(await worker.evaluate(async id => (await chrome.tabs.get(id)).active, ids['/editor']), true);
-
-  // Check Edge's actual settings page, not only the shared Chromium version UI.
   const internalPrefix = process.env.PLAYWRIGHT_EXECUTABLE_PATH?.toLowerCase().includes('msedge') ? 'edge' : 'chrome';
-  await restriction.goto(`${internalPrefix}://settings/`); await restriction.bringToFront();
-  await worker.evaluate(() => run(() => handleCommand('toggle-tab')));
-  assert.equal(await worker.evaluate(() => session), null);
-  assert.equal(await worker.evaluate(async id => (await chrome.tabs.get(id)).active, ids['/editor']), true);
-  assert.equal(await worker.evaluate(async () => (await chrome.runtime.getContexts({ contextTypes: ['POPUP'] })).length), 0);
-  await restriction.close();
-  console.log('PASS: internal version/settings pages switch immediately without opening a popup');
 
   const options = await context.newPage(); await options.goto(`chrome-extension://${extensionId}/options.html`);
   await options.locator('#windowScope').selectOption('all');
@@ -264,6 +249,73 @@ let profile;
   assert.equal(openedSettings, options);
   await until(() => worker.evaluate(async () => (await chrome.runtime.getContexts({ contextTypes: ['POPUP'] })).length), value => value === 0);
   console.log('PASS: real toolbar popup renders its search/tab list and Settings reuses the options tab');
+
+  async function attachKeyboardPopup(page, command = 'toggle-tab') {
+    // Settings can redirect after navigation resolves. Start the gesture only
+    // once its owning tab has finished that navigation, just as on webpages.
+    await page.waitForLoadState('load');
+    let stableURL; let stableSince = Date.now();
+    await until(() => {
+      if (page.url() !== stableURL) { stableURL = page.url(); stableSince = Date.now(); }
+      return Promise.resolve(Date.now() - stableSince > 350);
+    });
+    await editor.bringToFront(); await page.bringToFront();
+    await worker.evaluate(name => run(() => handleCommand(name)), command);
+    const active = await until(() => worker.evaluate(async () => { await queue; return session; }),
+      value => value && !value.embedded && value.keyboardInitiated && value.uiReady);
+    const target = (await popupCDP.send('Target.getTargets')).targetInfos.find(item => item.url === `chrome-extension://${extensionId}/switcher.html`);
+    assert.ok(target);
+    attached = await popupCDP.send('Target.attachToTarget', { targetId: target.targetId, flatten: false });
+    await until(() => popupEvaluate('document.querySelectorAll("[role=option]").length'), value => value > 0);
+    assert.equal(await popupEvaluate('document.getElementById("searchRow").hidden'), true);
+    assert.match(await popupEvaluate('document.getElementById("hint").textContent'), /Release Alt or press Enter/);
+    assert.equal(await popupEvaluate('document.activeElement.id'), 'list');
+    assert.equal(await popupEvaluate('Number(document.querySelector("[aria-selected=true]").id.slice(4))'), active.selectedTabId);
+    assert.equal(await page.locator('#edge-alt-tab-overlay-container').count(), 0);
+    return active;
+  }
+  async function popupKey(key, code, keyCode, type = 'keyDown', modifiers = 0) {
+    await popupCommand('Input.dispatchKeyEvent', { type, key, code, windowsVirtualKeyCode: keyCode,
+      nativeVirtualKeyCode: keyCode, modifiers });
+  }
+  async function waitForPopupClosed() {
+    await until(() => worker.evaluate(async () => { await queue; return session; }), value => value === null);
+    await until(() => worker.evaluate(async () => (await chrome.runtime.getContexts({ contextTypes: ['POPUP'] })).length), value => value === 0);
+  }
+  for (const route of ['version', 'settings/', 'extensions/', 'history/', 'newtab/']) {
+    const restriction = await context.newPage(); await restriction.goto(`${internalPrefix}://${route}`);
+    const active = await attachKeyboardPopup(restriction);
+    assert.equal(active.selectedTabId, ids['/editor']);
+    // Release is delivered to the real browser popup, never to a fake bridge.
+    await popupKey('Alt', 'AltLeft', 18, 'keyUp'); await waitForPopupClosed();
+    assert.equal(await worker.evaluate(async id => (await chrome.tabs.get(id)).active, ids['/editor']), true);
+    const reverse = await attachKeyboardPopup(restriction, 'cycle-backward');
+    await worker.evaluate(() => run(() => handleCommand('cycle-backward')));
+    await until(() => popupEvaluate('Number(document.querySelector("[aria-selected=true]").id.slice(4))'),
+      value => value !== reverse.selectedTabId);
+    await popupKey('ArrowDown', 'ArrowDown', 40);
+    await popupKey('Escape', 'Escape', 27); await waitForPopupClosed();
+    assert.equal(await restriction.evaluate(() => document.hasFocus()), true);
+    await attachKeyboardPopup(restriction);
+    await popupKey('Enter', 'Enter', 13); await waitForPopupClosed();
+    assert.equal(await worker.evaluate(async id => (await chrome.tabs.get(id)).active, ids['/editor']), true);
+    await restriction.close();
+  }
+  console.log(`PASS: ${internalPrefix} internal version/settings/extensions/history/new-tab pages display the popup; Alt release, reverse cycling, arrows, Escape, and Enter work`);
+
+  const settingsSource = await context.newPage(); await settingsSource.goto(`${internalPrefix}://settings/`);
+  await attachKeyboardPopup(settingsSource);
+  await popupKey('/', 'Slash', 191);
+  await until(() => popupEvaluate('document.getElementById("searchRow").hidden'), value => value === false);
+  await popupKey('Alt', 'AltLeft', 18, 'keyUp');
+  assert.ok(await worker.evaluate(async () => { await queue; return session?.searchMode; }));
+  const settingsPoint = await popupEvaluate(`(() => { const rect = document.getElementById('settingsButton').getBoundingClientRect();
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }; })()`);
+  await popupCommand('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...settingsPoint });
+  await popupCommand('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...settingsPoint });
+  assert.equal(await waitForSettings(), options); await waitForPopupClosed();
+  await settingsSource.close();
+  console.log('PASS: internal-page keyboard popup search pauses release switching and Settings remains usable');
 
   const popupSource = await context.newPage(); await popupSource.goto(`${internalPrefix}://settings/`);
   await popupSource.bringToFront(); await worker.evaluate(() => chrome.action.openPopup());

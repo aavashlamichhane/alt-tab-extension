@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.4
+
+- Open the browser's toolbar switcher on internal Edge and Chrome pages, preserving MRU order, forward/reverse selection, and switching mode without injecting scripts into browser pages.
+- Keep keyboard popup sessions across repeated commands; support modifier release once focused, arrows, Enter/click confirmation, Escape, search, and Settings.
+- Retain direct switching if the popup API is unavailable, opening fails, or startup times out. Stale startup timers cannot switch tabs after cancellation or replacement.
+- Clear vanished popup sessions on worker startup and reconcile cancellation or cycling during UI initialization.
+- Check real popups on Edge and Chromium version/settings/extensions/history/new-tab pages alongside normal-page regressions. Document Enter confirmation when modifier release occurs before popup focus.
+
 ## 1.4.3
 
 - Keep the toolbar popup open through transient Extensions-menu focus changes and verify its browser popup context.

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Edge Alt-Tab",
   "short_name": "Alt-Tab",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "minimum_chrome_version": "121",
   "author": "Aavash",
   "description": "Switch tabs in MRU order with a beautiful Fluent-inspired overlay. Mimics the native Alt-Tab experience in your browser.",

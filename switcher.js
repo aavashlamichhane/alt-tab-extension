@@ -13,6 +13,8 @@
   let refreshAgain = false;
   let expiryTimer;
   let popupPort = null;
+  let closedDuringStartup = null;
+  let changedDuringStartup = false;
   const list = document.getElementById('list');
   const search = document.getElementById('search');
   const status = document.getElementById('status');
@@ -69,7 +71,7 @@
     document.getElementById('empty').hidden = visible.length !== 0;
     document.getElementById('count').textContent = `${visible.length} ${visible.length === 1 ? 'tab' : 'tabs'}`;
     document.getElementById('hint').textContent = state.modifier && !searching
-      ? `Release ${state.modifier === 'Control' ? 'Ctrl' : state.modifier === 'Meta' ? 'Command' : state.modifier} to switch · ↑↓ · Esc cancels`
+      ? `Release ${state.modifier === 'Control' ? 'Ctrl' : state.modifier === 'Meta' ? 'Command' : state.modifier}${embedded ? '' : ' or press Enter'} to switch · ↑↓ · Esc cancels`
       : '↑↓ to choose · Enter to switch · Esc cancels';
     updateSelection();
   }
@@ -134,7 +136,15 @@
     } finally { refreshing = false; }
   }
   chrome.runtime.onMessage.addListener((message, sender) => {
-    if (sender.id !== chrome.runtime.id || message.sessionId !== sessionId) return;
+    if (sender.id !== chrome.runtime.id) return;
+    if (!embedded && !sessionId) {
+      // A navigation or cycle may finish while OPEN_POPUP is returning its
+      // snapshot. Reconcile after binding rather than revive a closed UI.
+      if (message.type === 'SESSION_CLOSED') closedDuringStartup = message.sessionId;
+      if (message.type === 'SESSION_STATE') changedDuringStartup = true;
+      return;
+    }
+    if (message.sessionId !== sessionId) return;
     if (message.type === 'SESSION_CLOSED') finish();
     if (message.type === 'SESSION_STATE') void refresh().catch(() => fail('Tabs could not be refreshed.'));
   });
@@ -190,9 +200,14 @@
     const result = embedded ? await send('UI_READY') : await send('OPEN_POPUP');
     if (!result?.state) { fail('No switcher session is available. Use the toolbar or your assigned shortcut.'); return; }
     state = result.state; sessionId = state.sessionId;
+    if (closedDuringStartup === sessionId) { finish(); return; }
+    searching = Boolean(state.searchMode);
     expiryTimer = setTimeout(() => { void cancel(); }, Math.max(0, state.expiresAt - Date.now()));
     render();
-    if (searching) toggleSearch(true); else list.focus();
+    // Bind the popup lifetime even when keyboard mode starts without search.
+    // Native popup dismissal does not reliably dispatch pagehide.
+    toggleSearch(searching);
+    if (changedDuringStartup) await refresh();
     if (pendingRelease && pendingRelease.key === state.modifier && !searching && Date.now() - pendingRelease.at < 2000) {
       await send('UI_RELEASE', { key: pendingRelease.key });
     }

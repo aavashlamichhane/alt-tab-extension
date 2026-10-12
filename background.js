@@ -1,6 +1,7 @@
 importScripts('shared.js');
 
 const SESSION_LIFETIME = 5 * 60 * 1000;
+const POPUP_START_TIMEOUT = 4000;
 let mruStack = [];
 let session = null;
 let settings = AltTab.normalizeSettings({});
@@ -50,6 +51,11 @@ async function initialize() {
   if (previous && previous.expiresAt > Date.now() && ids.has(previous.ownerTabId)) {
     const owner = tabs.find(tab => tab.id === previous.ownerTabId);
     if (owner.active && owner.url === previous.ownerUrl) session = previous;
+  }
+  if (session && !session.embedded) {
+    const contexts = await chrome.runtime.getContexts({ contextTypes: ['POPUP'],
+      documentUrls: [chrome.runtime.getURL('switcher.html')] });
+    if (!contexts.length) session = null;
   }
   // Retire obsolete durable tab IDs while preserving existing preferences.
   await chrome.storage.local.remove('mruStack');
@@ -109,6 +115,24 @@ async function switchWithoutOverlay() {
   const target = session.selectedTabId;
   await closeSession(); await activate(target);
 }
+async function popupStartTimedOut(sessionId) {
+  // Only the pending session may fall back. Dismissed/replaced popups must
+  // never activate a tab later when their startup timer fires.
+  if (session?.id === sessionId && !session.embedded && !session.uiReady) await switchWithoutOverlay();
+}
+async function showToolbarSwitcher() {
+  if (!session) return;
+  session.embedded = false;
+  session.uiReady = false;
+  session.uiDocumentId = null;
+  const sessionId = session.id;
+  await persist();
+  // Internal browser pages cannot host content scripts. Keep the keyboard
+  // session intact while moving its UI into a browser-owned action popup.
+  setTimeout(() => enqueue(() => popupStartTimedOut(sessionId)), POPUP_START_TIMEOUT);
+  try { await chrome.action.openPopup({ windowId: session.ownerWindowId }); }
+  catch { if (session?.id === sessionId) await switchWithoutOverlay(); }
+}
 async function startSession(tab, { embedded = true, direction = 1, instant = false } = {}) {
   if (!tab) return null;
   await closeSession();
@@ -132,15 +156,16 @@ async function startSession(tab, { embedded = true, direction = 1, instant = fal
     id: crypto.randomUUID(), ownerTabId: tab.id, ownerWindowId: tab.windowId,
     ownerUrl: tab.url, ownerDocumentId: null, uiDocumentId: null,
     candidateIds, selectedTabId: candidateIds[direction < 0 ? candidateIds.length - 1 : 1] ?? tab.id,
-    embedded, modifier: embedded && settings.switchMode === 'hold' ? binding.modifier : null,
+    embedded, keyboardInitiated: embedded,
+    modifier: embedded && settings.switchMode === 'hold' ? binding.modifier : null,
     binding, createdAt: Date.now(), expiresAt: Date.now() + SESSION_LIFETIME,
-    uiReady: false, searchMode: false
+    uiReady: false, searchMode: !embedded
   };
   await persist();
   if (!embedded) return session;
   if (candidateIds.length < 2) { await closeSession(); return null; }
   if (!/^(https?|file):/i.test(tab.url || '')) {
-    await switchWithoutOverlay();
+    await showToolbarSwitcher();
     return session;
   }
   try {
@@ -173,7 +198,7 @@ async function handleCommand(command, invokedTab) {
   const direction = command === 'cycle-backward' ? -1 : 1;
   if (command === 'quick-switch' || settings.switchMode === 'instant') {
     await startSession(tab, { instant: true });
-  } else if (session?.embedded && session.ownerTabId === tab.id) {
+  } else if ((session?.embedded || session?.keyboardInitiated) && session.ownerTabId === tab.id) {
     const index = session.candidateIds.indexOf(session.selectedTabId);
     session.selectedTabId = session.candidateIds[(index + direction + session.candidateIds.length) % session.candidateIds.length];
     await persist(); await broadcastState();
@@ -235,6 +260,7 @@ async function snapshot() {
   return {
     sessionId: session.id, selectedTabId: session.selectedTabId,
     modifier: session.modifier, embedded: session.embedded, expiresAt: session.expiresAt,
+    searchMode: session.searchMode,
     settings, tabs: session.candidateIds.map(id => {
       const tab = byId.get(id);
       return { id, title: tab.title || 'New Tab', url: tab.url || '',
@@ -249,7 +275,9 @@ async function onMessage(message, sender) {
   if (!message || sender.id !== chrome.runtime.id) return { ok: false };
   if (message.type === 'OPEN_POPUP' && await isToolbarPopup(sender)) {
     const tab = await currentTab();
-    await startSession(tab, { embedded: false });
+    const pending = session && !session.embedded && session.keyboardInitiated && !session.uiReady &&
+      session.ownerTabId === tab?.id && session.ownerUrl === tab?.url;
+    if (!pending) await startSession(tab, { embedded: false });
     if (!session) return { ok: false };
     session.uiDocumentId = sender.documentId; session.uiReady = true;
     await persist();

@@ -54,7 +54,8 @@ function fixture({ saved = {}, preferences = {}, startupGate = Promise.resolve()
         if (messagingFails) throw Error('no receiver'); return { ok: true }; }
     }
   };
-  const context = vm.createContext({ chrome, crypto: webcrypto, URL, Date, setTimeout, clearTimeout,
+  const context = vm.createContext({ chrome, crypto: webcrypto, URL, Date,
+    setTimeout: (...args) => { const timer = setTimeout(...args); timer.unref(); return timer; }, clearTimeout,
     console: { warn: message => calls.warnings.push(message) },
     importScripts: name => vm.runInContext(fs.readFileSync(path.join(root, name), 'utf8'), context) });
   vm.runInContext(fs.readFileSync(path.join(root, 'background.js'), 'utf8'), context);

@@ -101,11 +101,97 @@ test('restricted-page fallback switches immediately without opening a popup', as
   assert.equal(f.state(), null); assert.equal(f.calls.updates[0].id, 2); assert.deepEqual(f.calls.popups, []);
 });
 
-test('internal pages switch immediately without attempting script injection', async () => {
-  const f = fixture(); f.tabs[0].url = 'edge://settings/'; f.restrict(); await f.command('cycle-backward');
-  assert.equal(f.state(), null); assert.equal(f.calls.updates[0].id, 3);
-  assert.deepEqual(f.calls.scripts, []); assert.deepEqual(f.calls.popups, []);
-  assert.equal(f.calls.pageMessages.some(message => ['PING', 'SHOW_SWITCHER', 'ARM_SESSION'].includes(message.type)), false);
+test('Edge and Chrome internal pages open one popup preserving reverse selection and modifier', async () => {
+  for (const url of ['edge://settings/', 'chrome://settings/', 'edge://newtab/', 'chrome://history/']) {
+    const f = fixture(); f.tabs[0].url = url; f.restrict(); await f.command('cycle-backward');
+    const pending = f.state();
+    assert.equal(pending.embedded, false); assert.equal(pending.selectedTabId, 3);
+    assert.equal(pending.modifier, 'Alt'); assert.equal(pending.keyboardInitiated, true);
+    assert.deepEqual(f.calls.scripts, []); assert.deepEqual(f.calls.popups, [{ windowId: 10 }]);
+    assert.deepEqual(f.calls.updates, []);
+    assert.equal(f.calls.pageMessages.some(message => ['PING', 'SHOW_SWITCHER', 'ARM_SESSION'].includes(message.type)), false);
+    await f.command('cycle-backward');
+    assert.equal(f.state().selectedTabId, 2); assert.equal(f.calls.popups.length, 1);
+    const sender = f.popup(); const result = await f.message({ type: 'OPEN_POPUP' }, sender);
+    assert.equal(result.state.sessionId, pending.id); assert.equal(result.state.searchMode, false);
+    assert.deepEqual(result.state.tabs.map(tab => tab.id), [1, 2, 3]);
+    f.chrome.windows.onFocusChanged.emit(-1); await f.flush();
+    await f.message({ type: 'UI_RELEASE', sessionId: pending.id, key: 'Alt' }, sender);
+    assert.equal(f.state(), null); assert.equal(f.calls.updates[0].id, 2);
+  }
+});
+
+test('unsupported or rejected popup API falls back exactly once without a stuck session', async () => {
+  for (const unavailable of [undefined, async () => { throw Error('Popup unavailable'); }]) {
+    const f = fixture(); f.tabs[0].url = 'chrome://settings/'; f.chrome.action.openPopup = unavailable;
+    await f.command('toggle-tab'); assert.equal(f.state(), null);
+    assert.deepEqual(f.calls.updates, [{ id: 2, active: true }]);
+    assert.equal(f.sessionData.lastCommand.result, 'completed');
+  }
+});
+
+test('popup startup watchdog switches only while its original session is pending', async () => {
+  const f = fixture(); f.tabs[0].url = 'edge://settings/'; await f.command('toggle-tab');
+  const pendingId = f.state().id;
+  await f.evaluate(`run(() => popupStartTimedOut('${pendingId}'))`);
+  assert.equal(f.state(), null); assert.deepEqual(f.calls.updates, [{ id: 2, active: true }]);
+  await f.evaluate(`run(() => popupStartTimedOut('${pendingId}'))`);
+  assert.equal(f.calls.updates.length, 1);
+  await f.chrome.tabs.update(1, { active: true }); f.calls.updates.length = 1;
+  await f.command('toggle-tab'); const readyId = f.state().id;
+  const sender = f.popup(); await f.message({ type: 'OPEN_POPUP' }, sender);
+  await f.evaluate(`run(() => popupStartTimedOut('${readyId}'))`);
+  assert.equal(f.state().id, readyId);
+  await f.message({ type: 'UI_CANCEL', sessionId: readyId }, sender);
+  await f.command('toggle-tab'); const newerId = f.state().id;
+  await f.evaluate(`run(() => popupStartTimedOut('${readyId}'))`);
+  assert.equal(f.state().id, newerId); assert.equal(f.calls.updates.length, 1);
+});
+
+test('internal confirm, search, instant mode, and remapped shortcuts retain their behavior', async () => {
+  const confirm = fixture({ preferences: { switchMode: 'confirm' } }); confirm.tabs[0].url = 'edge://history/';
+  await confirm.command('toggle-tab'); const sender = confirm.popup();
+  const result = await confirm.message({ type: 'OPEN_POPUP' }, sender);
+  assert.equal(result.state.modifier, null);
+  await confirm.message({ type: 'UI_RELEASE', sessionId: result.state.sessionId, key: 'Alt' }, sender);
+  assert.deepEqual(confirm.calls.updates, []);
+  await confirm.message({ type: 'UI_COMMIT', sessionId: result.state.sessionId, tabId: 2 }, sender);
+  assert.equal(confirm.calls.updates.length, 1);
+  const remapped = fixture(); remapped.tabs[0].url = 'chrome://version/';
+  remapped.chrome.commands.bindings[0].shortcut = 'Ctrl+Shift+Y'; await remapped.command('toggle-tab');
+  const popup = remapped.popup(); await remapped.message({ type: 'OPEN_POPUP' }, popup); const sessionId = remapped.state().id;
+  assert.equal(remapped.state().modifier, 'Control');
+  await remapped.message({ type: 'UI_SEARCH', sessionId, active: true }, popup);
+  await remapped.message({ type: 'UI_RELEASE', sessionId, key: 'Control' }, popup);
+  assert.deepEqual(remapped.calls.updates, []);
+  const instant = fixture({ preferences: { switchMode: 'instant' } }); instant.tabs[0].url = 'edge://settings/';
+  await instant.command('toggle-tab'); assert.equal(instant.state(), null);
+  assert.deepEqual(instant.calls.popups, []); assert.equal(instant.calls.updates[0].id, 2);
+});
+
+test('worker startup discards a vanished popup without switching a tab', async () => {
+  const first = fixture(); first.tabs[0].url = 'chrome://settings/'; await first.command('toggle-tab');
+  const restored = fixture({ saved: first.sessionData, tabs: first.tabs }); await restored.flush();
+  assert.equal(restored.state(), null); assert.deepEqual(restored.calls.updates, []);
+});
+
+test('worker restart retains a live keyboard popup without opening it again', async () => {
+  const first = fixture(); first.tabs[0].url = 'edge://settings/'; await first.command('toggle-tab');
+  const sender = first.popup(); await first.message({ type: 'OPEN_POPUP' }, sender);
+  const restored = fixture({ saved: first.sessionData, tabs: first.tabs }); restored.popup(); await restored.flush();
+  assert.equal(restored.state().id, first.state().id); assert.deepEqual(restored.calls.popups, []);
+  await restored.message({ type: 'UI_RELEASE', sessionId: restored.state().id, key: 'Alt' }, sender);
+  assert.equal(restored.calls.updates[0].id, 2);
+});
+
+test('internal popup cancellation on navigation, tab change, or window change prevents delayed switching', async () => {
+  for (const cancel of [f => f.chrome.tabs.onUpdated.emit(1, { status: 'loading' }),
+    f => f.chrome.tabs.onRemoved.emit(1), f => f.chrome.tabs.onActivated.emit({ tabId: 3, windowId: 10 }),
+    f => f.chrome.windows.onFocusChanged.emit(20)]) {
+    const f = fixture(); f.tabs[0].url = 'chrome://settings/'; await f.command('toggle-tab'); const oldId = f.state().id;
+    cancel(f); await f.flush(); await f.evaluate(`run(() => popupStartTimedOut('${oldId}'))`);
+    assert.equal(f.state(), null); assert.deepEqual(f.calls.updates, []);
+  }
 });
 
 test('internal-page tabs remain available as switch targets on normal webpages', async () => {
