@@ -1,25 +1,37 @@
 # Alt-Tab
 
-A lightweight most-recently-used tab switcher designed for **Microsoft Edge and Google Chrome**, using Chromium 121 or newer.
+A keyboard-first tab switcher for **Microsoft Edge and Google Chrome**. Move through tabs in the order you last used them, search by title or address, and switch without reaching for the mouse.
 
 Published in the Microsoft Edge Add-ons store as **Edge Alt-Tab**. Chrome users can load the same source folder in Developer mode; the Edge store link below is for installation in Edge.
 
 [Install Edge Alt-Tab from Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/dfkilmdlljlgppagklljonbngphbhkho)
 
-Hold **Alt**, press **Q** to select your previous tab, press Q again to cycle, then release Alt to switch. **Alt+Shift+Q** cycles backwards. These controls and your chosen switching mode apply to both ordinary webpages and internal Edge/Chrome pages. Internal pages display the chooser in the toolbar popup. Click the toolbar icon to search tabs.
+Current source version: **1.4.6**. Supports Chromium 121+, with Chromium 127+ recommended for the internal-page toolbar chooser. Store updates may become available later than repository updates while Microsoft reviews them.
+
+## Quick start
+
+1. Visit at least two tabs in the same window.
+2. Hold **Alt** and press **Q** to highlight your previous tab.
+3. Keep holding Alt and press Q again to cycle through recently used tabs. Use **Alt+Shift+Q** to cycle backwards.
+4. Release Alt to activate the highlighted tab.
+
+Click the extension's toolbar icon to open a searchable tab list. Use its Settings button to change appearance, window scope, and shortcut behavior. These shortcuts and your chosen switching mode apply to both ordinary webpages and internal Edge/Chrome pages.
+
+**Internal pages use a toolbar popup.** A very fast Alt+Q tap can finish before that popup receives keyboard focus. If it stays open, press **Enter** or click the selected tab. See [Known limitations](#known-limitations) for details and options for immediate switching.
 
 ## Features
 
-- Current-window MRU by default, with an optional all-window mode that focuses the chosen window.
+- Recently used tabs in the current window, or across windows with automatic window focus.
 - Hold-to-switch, Enter-to-confirm, and immediate previous-tab interaction modes.
 - Consistent forward/reverse shortcuts and switching modes across webpages and internal browser pages.
-- Keyboard bridges in eligible editor frames, including matching blank/related frames, with fast-release reconciliation.
-- An extension-origin switcher: other-tab titles and addresses are not rendered in the website's DOM.
-- Browser-local favicon resources and a bundled fallback, with no Google favicon proxy.
+- Keyboard handling in eligible editor frames, including Google Docs and Sheets.
+- Other-tab titles and addresses displayed inside an extension-origin document.
+- Browser-local favicons with a bundled fallback icon.
 - Search by title/address, arrow navigation, Enter confirmation, Escape cancellation, and mouse selection.
 - A subtle centered panel with Simple as the default style, optional Fluent blur, system/light/dark appearance, compact spacing, custom accents, and reduced-motion/high-contrast support.
 - Assigned-shortcut display, automatic preference saving, appearance preview, and reset defaults.
-- Session history that survives background-worker suspension. After a browser restart or extension reload, order is reconstructed from the browser's tab access times where available.
+- Recent-tab order that survives background-worker suspension and is reconstructed after a browser restart or extension reload where browser access times are available.
+- No analytics or remotely loaded code.
 
 ## Controls
 
@@ -27,19 +39,32 @@ Hold **Alt**, press **Q** to select your previous tab, press Q again to cycle, t
 | --- | --- |
 | Open / cycle forward | Alt+Q |
 | Cycle backward | Alt+Shift+Q |
-| Switch | Release shortcut modifier, Enter, or click a tab |
+| Switch | Release the shortcut modifier in release mode; Enter or click also works |
 | Choose a row | Up/Down; Home/End outside search |
 | Search | Search button, Ctrl+F / Command+F, or / |
-| Cancel | Escape or click the backdrop |
+| Cancel | Escape; click the backdrop on webpages |
+| Open settings | Settings button in the chooser, or the extension's options menu |
 | Immediate previous tab | Optional command; assign in browser shortcuts |
 
 Search always uses Enter/click confirmation. Escape clears a nonempty search first, then cancels. Change assignments in `edge://extensions/shortcuts` or `chrome://extensions/shortcuts`; settings show the actual assignment. Browser/OS shortcuts may take priority. Missing modifier bindings use Enter confirmation.
 
-The same **Shortcut behavior** setting applies everywhere: release-to-switch uses the modifier, Enter-confirm requires confirmation, and instant mode switches directly to the previous tab. For reliable immediate switching without waiting for a chooser, select **Switch immediately to previous tab**; it applies to all tabs. The optional immediate previous-tab command can also be assigned separately.
+In settings, **Shortcut behavior** applies to every tab:
+
+| Setting | Behavior |
+| --- | --- |
+| Release modifier to switch | Show the chooser and activate the selected tab when the shortcut modifier is released. |
+| Press Enter to switch | Show the chooser and wait for Enter or a click. |
+| Switch immediately to previous tab | Switch directly to the previous tab without opening a chooser. |
+
+You can also assign the optional **Switch immediately to the previous tab** command separately, while keeping Alt+Q for the chooser.
 
 ## Installation and updates
 
-For everyday use in Edge, open the [Microsoft Edge Add-ons listing](https://microsoftedge.microsoft.com/addons/detail/dfkilmdlljlgppagklljonbngphbhkho), click **Get**, and confirm installation. Store releases become available after Microsoft's review; the repository may contain a newer version while an update is being reviewed.
+### Microsoft Edge store
+
+Open the [Microsoft Edge Add-ons listing](https://microsoftedge.microsoft.com/addons/detail/dfkilmdlljlgppagklljonbngphbhkho), click **Get**, and confirm installation. Store installations receive approved store updates; editing or pulling this repository does not update that installed copy.
+
+### Load the source in Edge or Chrome
 
 For Chrome, or to test the source version in Edge, download and extract this repository or clone it:
 
@@ -47,7 +72,7 @@ For Chrome, or to test the source version in Edge, download and extract this rep
 git clone https://github.com/aavashlamichhane/alt-tab-extension.git
 ```
 
-Changes to a local copy do not update an installed store copy. To load version 1.4.6 locally:
+No build or npm installation is needed to use the extension. Both browsers load the same folder containing `manifest.json`.
 
 | Browser | Extensions page | Keyboard shortcut assignments |
 | --- | --- | --- |
@@ -55,32 +80,43 @@ Changes to a local copy do not update an installed store copy. To load version 1
 | Google Chrome | `chrome://extensions` | `chrome://extensions/shortcuts` |
 
 1. Open your browser's Extensions page from the table above and temporarily disable any older Edge Alt-Tab copy, so it does not claim the same shortcuts.
-2. Enable **Developer mode**, choose **Load unpacked**, and select the downloaded or cloned `alt-tab-extension` folder containing `manifest.json`. No build or npm installation is needed to load the project.
+2. Enable **Developer mode**, choose **Load unpacked**, and select the downloaded or cloned `alt-tab-extension` folder containing `manifest.json`.
 3. Check that the new extension card shows **1.4.6**, its enable toggle is on, and it has no loading errors. If this exact folder is already loaded, click **Reload** on its card instead.
 4. Open your browser's shortcut assignments page from the table above. Assign **Alt+Q** to **Cycle through recently used tabs** and **Alt+Shift+Q** to **Cycle backwards through recently used tabs**. Check assignments even when the manifest supplies defaults: another installed copy can prevent registration.
-5. Reload the webpages you will test, especially Google Docs/Sheets, to install the updated frame bridge.
-6. Open at least two ordinary webpages in the same browser window, visit both, then hold Alt, press and release Q, and release Alt. The highlighted previous tab should activate. The toolbar icon opens a searchable popup with click/Enter confirmation.
-7. Open `edge://settings` in Edge or `chrome://settings` in Chrome. Alt+Q should open the chooser and select the previous tab; Alt+Shift+Q cycles backwards. Try modifier release, arrows, Escape, search, and Settings. Quick releases received during startup are retained. If the whole gesture finishes before the popup receives focus, press Enter to confirm. To test instant mode, enable it in settings and check direct switching on both ordinary and internal tabs.
+5. Reload existing webpages, especially Google Docs and Sheets, so they receive the updated keyboard handling.
+
+Follow [Quick start](#quick-start) to try the extension, or use the [manual release check](#manual-release-check) to test an update.
 
 After subsequent edits, click the extension card's **Reload**, then reload your test webpages. Chrome uses the same `manifest.json` and runtime assets as Edge; no separate Chrome build is needed. See Google's [unpacked installation guide](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked).
 
 Microsoft's [sideloading guide](https://learn.microsoft.com/en-us/microsoft-edge/extensions-chromium/getting-started/extension-sideloading) describes loading and reloading unpacked extensions in Edge.
 
-The manifest version is 1.4.6. Existing appearance preferences and the global switching mode are retained. The internal-page shortcut override introduced in 1.4.5 is removed; there is one switching policy for all tabs. “Automatic” accent from older versions becomes accurately labelled default blue. Old durable tab-ID history is retired because IDs are specific to a browser session.
+Existing appearance preferences and the global switching mode are retained when updating. Changes between releases are documented in [CHANGELOG.md](CHANGELOG.md).
 
-## Compatibility and privacy
+## Known limitations
 
-Internal pages (`edge://` and `chrome://`, including settings, version, and extensions) cannot host an extension's page overlay, so they display the same chooser in a browser toolbar popup. Both shortcuts keep their usual forward/backward meaning and use the same global switching mode as ordinary webpages.
+### Very fast shortcuts on internal pages
 
-The popup's position is controlled by the browser. It preserves forward/reverse selection and supports arrows, search, Enter/click, Escape, and Settings. Release capture starts before styles and UI initialization finish. Recent trusted modifier releases, or shortcut-key releases showing the modifier is already up, are reconciled once the session is ready. A held modifier and an early Escape do not cause automatic switching.
+Internal browser pages cannot receive the extension's page keyboard listeners. Alt-Tab opens a toolbar popup instead. It retains release events received while that popup starts, but **a complete press-and-release before the popup receives focus can be missed**. The chooser may remain open and need Enter or a click to finish switching.
 
-If the entire gesture happens before popup focus, the browser's [command event](https://developer.chrome.com/docs/extensions/reference/api/commands#event-onCommand) supplies no release information. That case still needs Enter/click confirmation; a timeout cannot safely distinguish a quick tap from a held shortcut. For direct switching everywhere, use the global instant mode. Search and Enter-confirm mode always require confirmation. Ordinary webpages retain the centered overlay and modifier-release bridges.
+The browser's [shortcut command event](https://developer.chrome.com/docs/extensions/reference/api/commands#event-onCommand) provides the command name and an optional tab, but no modifier-release event or current keyboard state. A delay alone cannot safely tell whether you tapped the shortcut or are still holding Alt to cycle.
 
-Programmatic toolbar popups require Chromium 127 or newer for ordinary installations ([Chrome action API](https://developer.chrome.com/docs/extensions/reference/api/action#method-openPopup)). On older supported browsers, or if the browser rejects the popup or it fails to initialize, the shortcut switches directly to the selected tab. Explicit instant mode always switches directly. Store/PDF pages that reject script injection retain direct switching. Browser pages remain selectable from other tabs. Local files require **Allow access to file URLs**. Some sandboxed/nonmatching frames cannot receive a bridge. A browser without a cached icon displays a generic icon.
+For reliable use:
 
-Normal and private tabs are kept separate when private access is enabled by the user. Website access is needed to detect modifier release in page frames; tab metadata is displayed only in an extension-origin document. The extension does not use external favicon services, analytics, or remote code. See [PRIVACY.md](PRIVACY.md) for data and permission details.
+- In release mode, keep Alt held until the chooser appears, then release it. If a rapid tap leaves it open, press Enter or click a row.
+- For direct switching, select **Shortcut behavior → Switch immediately to previous tab**. This setting applies to **all tabs**, including ordinary webpages.
+- To keep the chooser and also have a direct shortcut, assign the separate **Switch immediately to the previous tab** command on your browser's shortcut assignments page.
 
-Automated checks exercise normal-page overlays and real toolbar choosers on internal version/settings/extensions/history/new-tab pages in Chromium and Edge. They cover consistent switching modes, forward/reverse selection, modifier release, arrows, confirmation, cancellation, search, Settings, and release/cancellation during delayed popup startup. Headless checks invoke the command handler when native shortcuts are unavailable; Google Chrome's native shortcut dispatch, authenticated Docs/Sheets behavior, and alternate keyboard layouts still need a manual release pass in each target browser.
+Alt+Q and Alt+Shift+Q retain their forward/backward meanings everywhere; there is no separate internal-page shortcut policy. Search and Enter-confirm mode intentionally require confirmation.
+
+### Popup placement and protected pages
+
+- **Internal pages:** `edge://` and `chrome://` pages cannot host the centered webpage overlay. They use the toolbar popup, whose position is controlled by the browser. Arrows, search, Enter/click, Escape, and Settings work in this chooser.
+- **Older browsers or popup failures:** Programmatically opening a toolbar popup requires Chromium 127+ for ordinary installations ([action API documentation](https://developer.chrome.com/docs/extensions/reference/api/action#method-openPopup)). On older supported browsers, or when opening/initializing the popup fails, the shortcut falls back to switching directly to the selected tab.
+- **Other protected pages:** Store pages and PDF viewers that reject overlay injection use direct switching. Internal tabs can still be selected from the chooser on another tab.
+- **Local files:** Enable **Allow access to file URLs** to use the extension on local file pages.
+- **Editor frames:** Some sandboxed or nonmatching frames cannot receive keyboard handling. Reload Docs/Sheets after an extension update and allow site access.
+- **Favicons:** If the browser has no cached favicon, the extension shows its bundled generic icon.
 
 ## Troubleshooting
 
@@ -94,9 +130,15 @@ Automated checks exercise normal-page overlays and real toolbar choosers on inte
 | Internal-page popup stays open after releasing Alt | The browser may have delivered the release before popup focus. Press Enter or click a row. Search and Enter-confirm mode also require confirmation. |
 | Both the popup and shortcut fail | In settings, use **Troubleshooting → Check extension status** after trying the shortcut. An unchanged command timestamp suggests an assignment conflict; a failed operation calls for checking the extension's Errors or service-worker console. |
 
-Before a release, manually test modifier release in Docs/Sheets, rapid cycling, reverse cycling, search, cancellation, internal pages, and window switching in each target browser. Also load the extracted store ZIP to verify the actual package. A sleeping service worker is normal by itself.
+A sleeping extension service worker is normal by itself.
 
-## Development
+## Privacy
+
+Alt-Tab uses open-tab titles, addresses, and favicon information to display the chooser. Website access supports the overlay and modifier-release handling in page frames. Other-tab metadata is rendered inside an extension-origin document. Normal and private tabs remain separate when you enable private browsing access.
+
+The extension does not use analytics, external favicon services, or remote code. See [PRIVACY.md](PRIVACY.md) for the full data, storage, and permission details.
+
+## Development and testing
 
 The runtime uses vanilla JavaScript, HTML, and CSS with no downloaded dependencies. Node.js 22+ is used for development checks.
 
@@ -118,7 +160,18 @@ npm run test:browser
 
 The browser script uses a temporary profile, creates test editor frames, and writes screenshots to ignored `test-results/`. Existing Playwright installations can be used through `PLAYWRIGHT_MODULE` and `PLAYWRIGHT_EXECUTABLE_PATH`; `EXTENSION_PATH` selects an extracted package for the same checks. Headless automation may need to invoke the command handler directly because it does not always dispatch native extension shortcuts.
 
-`generate_icons.html` is a developer-only icon generator and is excluded from store packages. Version history is in [CHANGELOG.md](CHANGELOG.md). The store ZIP contains only runtime assets and the license; repository documentation, tests, and development tools are excluded.
+`generate_icons.html` is a developer-only icon generator and is excluded from store packages, along with repository documentation, tests, and development tools.
+
+Automated checks exercise webpage overlays and real internal-page toolbar choosers in Chromium and Edge, including navigation, search, settings, modifier release, and cancellation during delayed startup. Google Chrome's native shortcut dispatch, authenticated Docs/Sheets, and alternate keyboard layouts still require manual verification; automated browser checks do not cover those cases fully.
+
+### Manual release check
+
+Load the extracted release ZIP, verify its version, and test in each target browser:
+
+1. Open two ordinary webpages and check Alt+Q, repeated cycling, Alt+Shift+Q, and modifier release.
+2. Test inside a Google Docs document and a Google Sheets cell after reloading those pages.
+3. On `edge://settings` or `chrome://settings`, test both a held shortcut and a rapid tap. Confirm that Enter/click can finish a missed release and Escape cancels.
+4. Test search, toolbar opening, Settings, window scope, and direct-switch mode on ordinary and internal pages.
 
 ## Support and license
 
